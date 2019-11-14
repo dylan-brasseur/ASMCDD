@@ -1,0 +1,4 @@
+/opengl45-quick-reference-card.pdf
+cmake-build*/*.*
+/cmake-build-debug/
+/cmake-build-release/
