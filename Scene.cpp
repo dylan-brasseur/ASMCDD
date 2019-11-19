@@ -48,9 +48,13 @@ void MeshInstances::draw(GLint instanceVBO_location){
     glBindVertexArray(0);
 }
 
+InstanceCoordinates &MeshInstances::getInstance(unsigned int index){
+    return instances.at(index);
+}
+
 MeshInstances & Scene::addMesh(std::shared_ptr<Mesh> const & m) {
     mesh_instances.emplace_back(m);
-    return mesh_instances[mesh_instances.size()-1];
+    return mesh_instances.back();
 }
 
 MeshInstances & Scene::getMesh(unsigned int i)
@@ -59,8 +63,14 @@ MeshInstances & Scene::getMesh(unsigned int i)
 }
 
 void Scene::draw() {
+    //Appliquer la caméra
+    camera.apply();
     // iterer sur l'ensemble des objets, et faire leur rendu.
     for(auto & mi : mesh_instances) {
         mi.draw(instanceVBO_location);
     }
+}
+
+Camera &Scene::getCamera(){
+    return camera;
 }

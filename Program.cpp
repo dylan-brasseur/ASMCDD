@@ -98,4 +98,13 @@ GLint Program::getAttribLocation(const std::string &attrib_name) const{
     return attrib_locations.at(attrib_name);
 }
 
+bool Program::addUniformLocation(const std::string &attrib_name){
+    const GLint location = glGetUniformLocation(id, attrib_name.c_str());TEST_OPENGL_ERROR();
+    uniform_locations.insert_or_assign(attrib_name, location);
+    return location!=-1;
+}
+
+GLint Program::getUniformLocation(const std::string &attrib_name) const{
+    return uniform_locations.at(attrib_name);
+}
 

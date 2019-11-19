@@ -4,6 +4,12 @@
 #include <cmath>
 #include <iostream>
 #include "utils.h"
+
+struct float3{
+    float a;
+    float b;
+    float c;
+};
 class Vec3 {
 private:
     float mVals[3]{};

@@ -8,6 +8,9 @@
 #include <GL/glew.h>
 #include <iostream>
 #include <cstring>
+#include <memory>
+
+
 
 const char* getErrorName(GLenum err);
 const char* getShaderName(GLenum type);
@@ -21,9 +24,5 @@ const char* getShaderName(GLenum type);
   } while(0)
 
 std::string load(const std::string &filename);
-struct float3{
-    float a;
-    float b;
-    float c;
-};
+
 #endif //UTILS_H

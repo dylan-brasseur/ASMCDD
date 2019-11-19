@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include "Mesh.h"
+#include "Camera.h"
 
 #include <GL/glut.h>
 
@@ -29,18 +30,22 @@ public:
     explicit MeshInstances(std::shared_ptr<Mesh>  m);
     void addInstance(InstanceCoordinates const & instance);
     void modifyInstance(unsigned int index, InstanceCoordinates const & instance);
+    InstanceCoordinates & getInstance(unsigned int index);
     void draw(GLint instanceVBO_location);
 };
 
 class Scene {
 private:
     std::vector<MeshInstances> mesh_instances;
+    Camera camera;
     GLint instanceVBO_location;
 public:
-    explicit Scene(GLint instance_location):instanceVBO_location(instance_location){};
+    explicit Scene(GLint instance_location, GLint VP_location):camera(VP_location), instanceVBO_location(instance_location){};
     MeshInstances & addMesh(std::shared_ptr<Mesh> const & m);
     MeshInstances & getMesh(unsigned int i);
     void draw();
+
+    Camera &getCamera();
 };
 
 

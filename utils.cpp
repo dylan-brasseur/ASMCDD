@@ -4,6 +4,7 @@
 
 #include "include/utils.h"
 #include <fstream>
+#include <memory>
 
 std::string load(const std::string &filename) {
     std::ifstream input_src_file(filename, std::ios::in);

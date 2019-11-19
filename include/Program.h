@@ -25,6 +25,8 @@ public:
     bool link();
     bool addAttribLocation(const std::string& attrib_name);
     [[nodiscard]] GLint getAttribLocation(const std::string& attrib_name) const;
+    bool addUniformLocation(const std::string& attrib_name);
+    [[nodiscard]] GLint getUniformLocation(const std::string& attrib_name) const;
 
 private:
     std::string name;
@@ -33,6 +35,7 @@ private:
     std::vector<std::shared_ptr<Shader>> attachedShaders;
     static std::vector<std::shared_ptr<Program>> programList;
     std::map<std::string, GLint> attrib_locations;
+    std::map<std::string, GLint> uniform_locations;
 };
 
 #endif //DISKSPROJECT_PROGRAM_H
