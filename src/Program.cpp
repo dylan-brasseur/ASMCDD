@@ -2,8 +2,8 @@
 // Created by Dylan Brasseur on 25/10/19.
 //
 #include <algorithm>
-#include "include/Program.h"
-#include "include/utils.h"
+#include "../include/Program.h"
+#include "../include/utils.h"
 
 std::vector<std::shared_ptr<Program>> Program::programList;
 

@@ -1,10 +1,10 @@
-#include "include/Mesh.h"
+#include "../include/Mesh.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #define TINYPLY_IMPLEMENTATION
-#include "include/tinyply.h"
-#include "include/utils.h"
+#include "../include/tinyply.h"
+#include "../include/utils.h"
 
 std::vector<std::shared_ptr<Mesh>> Mesh::meshList;
 void Mesh::loadOFF (const std::string & filename) {

@@ -2,12 +2,17 @@
 // Created by "Dylan Brasseur" on 11/11/2019.
 //
 
-#include "include/Scene.h"
+#include "../include/Scene.h"
 
 MeshInstances::MeshInstances(std::shared_ptr<Mesh> m){
     base = std::move(m);
     instancesAmountChanged = true;
     glGenBuffers(1, &instanceVBO_id);TEST_OPENGL_ERROR();
+    glGenVertexArrays(1, &instance_VAO_id);TEST_OPENGL_ERROR();
+    color_code[0] = 0;
+    color_code[1] = 0;
+    color_code[2] = 0;
+
 }
 
 void MeshInstances::addInstance(InstanceCoordinates const & instance)
@@ -52,6 +57,40 @@ InstanceCoordinates &MeshInstances::getInstance(unsigned int index){
     return instances.at(index);
 }
 
+void MeshInstances::setColor(float r, float g, float b){
+    color_code[0] = r;
+    color_code[1] = g;
+    color_code[2] = b;
+}
+
+void MeshInstances::drawAsDisks(GLint offset_scale_rot_location, GLint color_uniform_location){
+    if(!instances.empty())
+    {
+        glUniform3fv(color_uniform_location, 1, color_code);TEST_OPENGL_ERROR();
+        glBindVertexArray(instance_VAO_id);TEST_OPENGL_ERROR();
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO_id);TEST_OPENGL_ERROR();
+
+        if(instancesAmountChanged){
+            //Reallocate
+            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_STREAM_DRAW);TEST_OPENGL_ERROR();
+            instancesAmountChanged=false;
+            changed_indices.clear(); //We copied the whole buffer anyway
+        }else if(!changed_indices.empty())
+        {
+            //Modify content
+            for(unsigned int i : changed_indices)
+            {
+                glBufferSubData(GL_ARRAY_BUFFER, i*sizeof(InstanceCoordinates),sizeof(InstanceCoordinates), &(instances[i]));TEST_OPENGL_ERROR();
+            }
+            changed_indices.clear();
+        }
+        glVertexAttribPointer(offset_scale_rot_location, 4, GL_FLOAT, GL_FALSE, 0, nullptr);TEST_OPENGL_ERROR();
+        glEnableVertexAttribArray(offset_scale_rot_location);TEST_OPENGL_ERROR();
+        glDrawArrays(GL_POINTS, 0, instances.size());TEST_OPENGL_ERROR();
+    }
+    glBindVertexArray(0);
+}
+
 MeshInstances & Scene::addMesh(std::shared_ptr<Mesh> const & m) {
     mesh_instances.emplace_back(m);
     return mesh_instances.back();
@@ -73,4 +112,11 @@ void Scene::draw() {
 
 Camera &Scene::getCamera(){
     return camera;
+}
+
+void Scene::drawAsDisks(GLint offset_scale_rot_location, GLint color_location, GLint bounds_location, float* bounds){
+    glUniform4fv(bounds_location, 1, bounds);TEST_OPENGL_ERROR();
+    for(auto & mi : mesh_instances)    {
+        mi.drawAsDisks(offset_scale_rot_location, color_location);
+    }
 }

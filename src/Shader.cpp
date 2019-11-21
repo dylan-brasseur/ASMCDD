@@ -2,8 +2,8 @@
 // Created by Dylan Brasseur on 23/10/19.
 //
 
-#include "include/Shader.h"
-#include "include/utils.h"
+#include "../include/Shader.h"
+#include "../include/utils.h"
 
 std::vector<std::shared_ptr<Shader>> Shader::shaderList;
 

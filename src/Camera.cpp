@@ -2,8 +2,8 @@
 // Created by "Dylan Brasseur" on 14/11/2019.
 //
 
-#include "include/Camera.h"
-#include "include/utils.h"
+#include "../include/Camera.h"
+#include "../include/utils.h"
 
 Camera::Camera(GLint _VP_location){
     VP_location = _VP_location;
