@@ -26,13 +26,15 @@ public:
     [[nodiscard]] const std::string &getFilename() const;
     [[nodiscard]] GLenum getType() const;
     void setFilename(const std::string &_filename);
+    void replace_in_shader(const std::string & pattern, const std::string & replace);
+    void clear_replacements();
 
     static bool compileAll();
 
 
 private:
     static std::vector<std::shared_ptr<Shader>> shaderList;
-
+    std::vector<std::pair<std::string, std::string>> values_to_replace;
     GLuint id;
     GLint compile_status;
     std::string filename;

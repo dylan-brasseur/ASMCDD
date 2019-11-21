@@ -20,6 +20,16 @@ bool Shader::compile()
     if(id <= 0) //Erreur lors de la création du shader
         return false;
     std::string content = load(filename);
+
+    for(auto & value : values_to_replace)
+    {
+        auto position = content.find(value.first);
+        if(position != std::string::npos)
+        {
+            content.replace(position,value.first.length(), value.second);
+        }
+    }
+
     const char* source = content.c_str();
     glShaderSource(id, 1, (const GLchar**)&(source), nullptr);TEST_OPENGL_ERROR();
     glCompileShader(id);TEST_OPENGL_ERROR();
@@ -90,4 +100,12 @@ bool Shader::compileAll(){
 
 bool Shader::operator==(const Shader &s){
     return id==s.id;
+}
+
+void Shader::replace_in_shader(const std::string & find, const std::string & replace){
+    values_to_replace.emplace_back(find, replace);
+}
+
+void Shader::clear_replacements(){
+    values_to_replace.clear();
 }

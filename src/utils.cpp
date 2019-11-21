@@ -17,7 +17,6 @@ std::string load(const std::string &filename) {
     while(getline(input_src_file, ligne)) {
         file_content+=ligne + "\n";
     }
-    //file_content += '\0';
     input_src_file.close();
     return file_content;
 }

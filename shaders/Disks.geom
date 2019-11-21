@@ -1,7 +1,7 @@
 #version 450
 
 //To be defined by the program
-#define VERTICES_PER_DISK 20
+#define VERTICES_PER_DISK NB_V_DISK
 
 #define M_PI 3.14159265358979323846
 

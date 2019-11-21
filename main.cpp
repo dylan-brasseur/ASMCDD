@@ -15,7 +15,7 @@ struct WindowHolder{
     std::shared_ptr<Scene> scene;
 };
 
-static WindowHolder view3D, graphs;
+WindowHolder view3D, graphs;
 
 void window_resize_3D(int width, int height) {
     glViewport(0,0,width,height);TEST_OPENGL_ERROR();
@@ -118,6 +118,8 @@ bool init_shaders() {
     auto fragment_shader_disks = Shader::createShader(GL_FRAGMENT_SHADER, "shaders/Disks.frag");
     auto geometry_shader_disks = Shader::createShader(GL_GEOMETRY_SHADER, "shaders/Disks.geom");
 
+    geometry_shader_disks->replace_in_shader("NB_V_DISK", "32");
+
     if(!Shader::compileAll())
     {
         Shader::getShaderList().clear();
@@ -191,6 +193,9 @@ int main(int argc, char *argv[]) {
     graphs.scene = view3D.scene;
     glLineWidth(1.5);
     glEnable(GL_LINE_SMOOTH);
+    const unsigned char* vendor = glGetString(GL_VENDOR);
+    const unsigned char* renderer = glGetString(GL_RENDERER);
+    std::cout << "Running program on " << renderer << "from " << vendor << std::endl;
 
     glutMainLoop();
 }
