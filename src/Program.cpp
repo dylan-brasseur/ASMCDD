@@ -89,6 +89,7 @@ bool Program::linkAll(){
 }
 
 bool Program::addAttribLocation(const std::string& attrib_name){
+
     const GLint location = glGetAttribLocation(id, attrib_name.c_str());TEST_OPENGL_ERROR();
     attrib_locations.insert_or_assign(attrib_name, location);
     return location!=-1;

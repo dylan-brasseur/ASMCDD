@@ -8,6 +8,7 @@
 #include <string>
 #include <GL/glew.h>
 #include <map>
+#include <iostream>
 #include "Shader.h"
 
 class Program{
@@ -23,9 +24,35 @@ public:
     void detach(std::shared_ptr<Shader> & s);
     void detach(unsigned int shaderlist_id);
     bool link();
+
     bool addAttribLocation(const std::string& attrib_name);
+    template<class = void>
+    static bool addAttribLocations(){
+        return true;
+    }
+    template<typename Arg>
+    bool addAttribLocations(Arg value){
+        return addAttribLocation(value);
+    }
+    template<typename Arg, typename ... Args>
+    bool addAttribLocations(Arg head, Args ... args){
+        return addAttribLocation(head) && addAttribLocations(args...);
+    }
     [[nodiscard]] GLint getAttribLocation(const std::string& attrib_name) const;
-    bool addUniformLocation(const std::string& attrib_name);
+
+    bool addUniformLocation(std::string const & attrib_name);
+    /*template<class = void>
+    static bool addUniformLocations(){
+        return true;
+    }*/
+    template<typename Arg>
+    bool addUniformLocations(Arg value){
+        return addUniformLocation(value);
+    }
+    template<typename Arg, typename ... Args>
+    bool addUniformLocations(Arg head, Args ... args){
+        return addUniformLocation(head) && addUniformLocations(args...);
+    }
     [[nodiscard]] GLint getUniformLocation(const std::string& attrib_name) const;
 
 private:
