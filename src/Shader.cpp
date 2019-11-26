@@ -12,7 +12,7 @@ Shader::Shader(GLenum type, std::string const & filename){
     this->filename = filename;
     this->type=type;
     id = glCreateShader(type);TEST_OPENGL_ERROR();
-    std::cout << "Added shader " << id << std::endl;
+    std::cout << "Added " << getShaderName(type) << ' ' << id << std::endl;
 }
 
 bool Shader::compile()
@@ -55,7 +55,7 @@ Shader::~Shader()
     if(id > 0)
     {
         glDeleteShader(id);
-        std::cout << "Deleted shader " << id << std::endl;
+        std::cout << "Deleted " << getShaderName(type) << ' ' << id << std::endl;
     }
 
 }

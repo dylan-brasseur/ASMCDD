@@ -10,8 +10,6 @@
 #include <cstring>
 #include <memory>
 
-
-
 const char* getErrorName(GLenum err);
 const char* getShaderName(GLenum type);
 
@@ -24,5 +22,11 @@ const char* getShaderName(GLenum type);
   } while(0)
 
 std::string load(const std::string &filename);
+
+class implementation_error : public std::logic_error
+{
+public:
+    implementation_error() : std::logic_error("Function not yet implemented") { };
+};
 
 #endif //UTILS_H

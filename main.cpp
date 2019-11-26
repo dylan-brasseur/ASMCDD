@@ -7,13 +7,18 @@
 #include "include/Shader.h"
 #include "include/Program.h"
 #include "include/Scene.h"
-#include "include/Camera.h"
+#include "include/Graph.h"
 
 struct WindowHolder{
     int window_id=-1;
     std::shared_ptr<Program> program;
     std::shared_ptr<Scene> scene;
+    std::shared_ptr<Graph> graph;
 };
+
+Graph testg;
+int lines_id;
+std::shared_ptr<Program> testProgram;
 
 WindowHolder view3D, graphs;
 
@@ -45,15 +50,35 @@ void anim(){
     glutPostRedisplay();
     glutSetWindow(graphs.window_id);
     glutPostRedisplay();
+    glutSetWindow(lines_id);
+    glutPostRedisplay();
 }
-
+std::chrono::time_point start = std::chrono::high_resolution_clock::now();
+long long int frameTimes[3] = {17,17,16};
+unsigned char frameTimeIndex=0;
+unsigned long long int nbOfFrames=0; unsigned long long int nbOfMs=0;
 void timer(int value){
-    auto start = std::chrono::high_resolution_clock::now();
-    anim();
     auto end = std::chrono::high_resolution_clock::now();
+    glutTimerFunc(frameTimes[frameTimeIndex++], timer, 0);
+    anim();
+    if(frameTimeIndex >= 3) frameTimeIndex=0;
     auto duration = end-start;
-    std::chrono::milliseconds ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-    glutTimerFunc(std::max(15L-ms.count(), 1L), timer, 0);
+    std::chrono::microseconds ms = std::chrono::duration_cast<std::chrono::microseconds>(duration);
+    nbOfFrames++;
+    nbOfMs+=ms.count()/1000;
+    if(nbOfMs >= 1000)
+    {
+        static char window_title[64];
+        std::sprintf(window_title,"3D view - FPS : %.1f", float(nbOfFrames*1000)/float(nbOfMs));
+        glutSetWindow(view3D.window_id);
+        glutSetWindowTitle(window_title);
+        std::sprintf(window_title,"Graph view - FPS : %.1f", float(nbOfFrames*1000)/float(nbOfMs));
+        glutSetWindow(graphs.window_id);
+        glutSetWindowTitle(window_title);
+        nbOfFrames=0;
+        nbOfMs=0;
+    }
+    start = end;
 }
 float bounds[4] = {-3, -3, 3, 3};
 void display_graph(){
@@ -78,11 +103,31 @@ void init_GL() {
     glCullFace(GL_BACK);TEST_OPENGL_ERROR();
 }
 
+void display_lines()
+{
+    glutSetWindow(lines_id);
+    testProgram->use();
+    glClearColor(1.0,1.0,1.0,1.0);TEST_OPENGL_ERROR();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);TEST_OPENGL_ERROR();
+    GLint color_location = testProgram->getUniformLocation("color");
+    GLint bounds_location = testProgram->getUniformLocation("bounds");
+    GLint VBO_location = testProgram->getAttribLocation("point");
+    testg.draw(VBO_location, bounds_location, bounds, color_location);
+    glutSwapBuffers();
+}
+
 void init_glut(int &argc, char *argv[]) {
     glutInit(&argc, argv);
     glutSetOption(GLUT_RENDERING_CONTEXT ,GLUT_USE_CURRENT_CONTEXT);
     glutInitContextVersion(4,5);
     glutInitContextProfile(GLUT_CORE_PROFILE | GLUT_DEBUG);
+
+    glutInitDisplayMode(GLUT_RGBA|GLUT_DOUBLE|GLUT_DEPTH);
+    glutInitWindowSize(640, 640);
+    glutInitWindowPosition ( 800, 100 );
+    lines_id = glutCreateWindow("Line View");
+    init_GL();
+    glutDisplayFunc(display_lines);
 
     glutInitDisplayMode(GLUT_RGBA|GLUT_DOUBLE|GLUT_DEPTH);
     glutInitWindowSize(640, 640);
@@ -99,7 +144,6 @@ void init_glut(int &argc, char *argv[]) {
     init_GL();
     glutDisplayFunc(display_3D);
     glutReshapeFunc(window_resize_3D);
-    glutTimerFunc(10, timer, 0);
 }
 
 bool init_glew() {
@@ -110,6 +154,8 @@ bool init_glew() {
     return true;
 }
 
+
+
 bool init_shaders() {
     auto vertex_shader_3D = Shader::createShader(GL_VERTEX_SHADER, "shaders/3D.vert");
     auto fragment_shader_3D = Shader::createShader(GL_FRAGMENT_SHADER, "shaders/3D.frag");
@@ -119,6 +165,9 @@ bool init_shaders() {
     auto geometry_shader_disks = Shader::createShader(GL_GEOMETRY_SHADER, "shaders/Disks.geom");
 
     geometry_shader_disks->replace_in_shader("NB_V_DISK", "32");
+
+    auto vertex_shader_plot = Shader::createShader(GL_VERTEX_SHADER, "shaders/Plot.vert");
+    auto fragment_shader_plot = Shader::createShader(GL_FRAGMENT_SHADER, "shaders/Plot.frag");
 
     if(!Shader::compileAll())
     {
@@ -135,6 +184,10 @@ bool init_shaders() {
     program_Disks->attach(fragment_shader_disks);
     program_Disks->attach(geometry_shader_disks);
 
+    testProgram = Program::createProgram("Plot program");
+    testProgram->attach(vertex_shader_plot);
+    testProgram->attach(fragment_shader_plot);
+
     if(!Program::linkAll())
     {
         Program::getProgramList().clear();
@@ -145,7 +198,6 @@ bool init_shaders() {
     graphs.program=program_Disks;
     return true;
 }
-
 
 int main(int argc, char *argv[]) {
     auto monkey = Mesh::createmesh("models/champi.ply", true);
@@ -184,18 +236,36 @@ int main(int argc, char *argv[]) {
     auto & mi2 = view3D.scene->addMesh(m2);
     mi2.addInstance({-1, 0.0f, 0.1, 0.5f});
     mi2.setColor(0.0, 1.0, 0.0);
-
     if(!graphs.program->addAttribLocation("offset_scale_rot") || ! graphs.program->addUniformLocation("bounds") || !graphs.program->addUniformLocation("color"))
     {
         std::cerr << "Bad attribute location Disks program" << std::endl;
         exit(EXIT_FAILURE);
     }
+
+    if(!testProgram->addAttribLocation("point") || !testProgram->addUniformLocation("color") || !testProgram->addUniformLocation("bounds"))
+    {
+        std::cerr << "Bad attribute location Line program" << std::endl;
+        exit(EXIT_FAILURE);
+    }
     graphs.scene = view3D.scene;
-    glLineWidth(1.5);
+    glLineWidth(2);
     glEnable(GL_LINE_SMOOTH);
     const unsigned char* vendor = glGetString(GL_VENDOR);
     const unsigned char* renderer = glGetString(GL_RENDERER);
-    std::cout << "Running program on " << renderer << "from " << vendor << std::endl;
 
+    std::cout << "Running " << (argc > 0 ? argv[0] : "program") << " on " << renderer << "from " << vendor << std::endl;
+
+    unsigned int id = testg.addPlot("test");
+    testg.addDataPoint(id, std::make_pair<float, float>(0, 1));
+    testg.addDataPoint(id, std::make_pair<float, float>(1, 2));
+    testg.addDataPoint(id, std::make_pair<float, float>(2, 3));
+    testg.setPlotColor(id, {0, 1, 0});
+    id = testg.addPlot("test2");
+    testg.addDataPoint(id, std::make_pair<float, float>(0, 3));
+    testg.addDataPoint(id, std::make_pair<float, float>(1, 2));
+    testg.addDataPoint(id, std::make_pair<float, float>(2, 1));
+    testg.setPlotColor(id, {1, 0, 0});
+    start = std::chrono::high_resolution_clock::now();
+    glutTimerFunc(16, timer, 0);
     glutMainLoop();
 }

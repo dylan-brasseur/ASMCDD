@@ -25,8 +25,8 @@ static const char* errorMessage[] = {"GL_INVALID_ENUM", "GL_INVALID_VALUE", "GL_
 
 
 const char *getErrorName(GLenum err){
-    const int n = err-GL_INVALID_ENUM;
-    return (n < 0 || n >= 8) ? "UNKNOWN_ERROR" : errorMessage[n];
+    const unsigned int n = err-GL_INVALID_ENUM;
+    return (n >= 8) ? "UNKNOWN_ERROR" : errorMessage[n];
 }
 
 const char *getShaderName(GLenum type){

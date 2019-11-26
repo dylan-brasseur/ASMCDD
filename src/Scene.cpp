@@ -33,7 +33,7 @@ void MeshInstances::draw(GLint instanceVBO_location){
 
         if(instancesAmountChanged){
             //Reallocate
-            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_STATIC_DRAW);TEST_OPENGL_ERROR();
+            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_DYNAMIC_DRAW);TEST_OPENGL_ERROR();
             instancesAmountChanged=false;
             changed_indices.clear(); //We copied the whole buffer anyway
         }else if(!changed_indices.empty())

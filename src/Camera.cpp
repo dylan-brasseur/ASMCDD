@@ -97,7 +97,6 @@ float *Camera::getV(){
 
 void Camera::apply(){
     if(!VP_good) computeVP();
-    //std::cout << P_good << ' ' << V_good << ' ' << VP_good << ' ' << VP[0][0] << ' ' << VP[1][0] << ' ' << far << ' ' << near << ' '<<  << ' '
     glUniformMatrix4fv(VP_location, 1, GL_FALSE, getVP());TEST_OPENGL_ERROR();
 }
 
