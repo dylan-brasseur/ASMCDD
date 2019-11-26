@@ -2,21 +2,21 @@
 // Created by "Dylan Brasseur" on 22/11/2019.
 //
 
-#include "../include/Graph.h"
+#include "../include/LinePlot.h"
 #include <algorithm>
-Graph::Graph() {
+LinePlot::LinePlot() {
     plot_VAO_id = plot_VBO_id = bufferSize = currentSize = 0;
     pointsChanged = false;
     axis_changed = false;
     tick_spacing = 1;
     tick_length = 0.1;
 }
-Graph::Graph(const std::string &xaxis_name, const std::string &yaxis_name) : Graph(){
+LinePlot::LinePlot(const std::string &xaxis_name, const std::string &yaxis_name) : LinePlot(){
     x_axis_name = xaxis_name;
     y_axis_name = yaxis_name;
 }
 
-void Graph::clearDataPoints(std::string const &name){
+void LinePlot::clearDataPoints(std::string const &name){
     auto entry = std::find(plots.begin(), plots.end(), name);
     if(entry != plots.end())
     {
@@ -25,26 +25,26 @@ void Graph::clearDataPoints(std::string const &name){
     }
 }
 
-void Graph::clear(){
+void LinePlot::clear(){
     plots.clear();
 }
 
-unsigned int Graph::addPlot(const std::string &name){
+unsigned int LinePlot::addPlot(const std::string &name){
     Plot plot;
     plot.name = name;
     plot.color[0]=plot.color[1]=plot.color[2]=0;
-    plots.push_back(std::move(plot));
+    plots.push_back(plot);
     return plots.size()-1;
 }
 
-unsigned int Graph::addDataPoint(unsigned int plot_id, std::pair<float, float> const &point){
+unsigned int LinePlot::addDataPoint(unsigned int plot_id, std::pair<float, float> const &point){
     plots.at(plot_id).dataPoints.push_back(point);
     pointsChanged=true;
     currentSize++;
     return plots[plot_id].dataPoints.size()-1;
 }
 
-unsigned int Graph::addDataPoints(unsigned int plot_id, std::vector<std::pair<float, float>> const &points){
+unsigned int LinePlot::addDataPoints(unsigned int plot_id, std::vector<std::pair<float, float>> const &points){
     auto plot = plots.at(plot_id);
     plot.dataPoints.reserve(plot.dataPoints.size()+points.size());
     for(auto & p : points)
@@ -56,30 +56,30 @@ unsigned int Graph::addDataPoints(unsigned int plot_id, std::vector<std::pair<fl
     return plot.dataPoints.size()-points.size();
 }
 
-void Graph::modifyPoint(unsigned int plot, unsigned int index, std::pair<float, float> const &point){
+void LinePlot::modifyPoint(unsigned int plot, unsigned int index, std::pair<float, float> const &point){
     plots.at(plot).dataPoints.at(index) = point;
     pointsChanged = true;
 }
 
-void Graph::removeDataPoints(unsigned int plot_id, unsigned int start, unsigned int end){
+void LinePlot::removeDataPoints(unsigned int plot_id, unsigned int start, unsigned int end){
     auto data = plots.at(plot_id).dataPoints;
     data.erase(data.begin()+start, data.begin()+end);
     currentSize-= (end-start);
     pointsChanged = true;
 }
 
-float3 Graph::getPlotColor(unsigned int plot_id) const{
+float3 LinePlot::getPlotColor(unsigned int plot_id) const{
     return {plots.at(plot_id).color[0], plots.at(plot_id).color[1], plots.at(plot_id).color[2]};
 }
 
-void Graph::setPlotColor(unsigned int plot_id, float3 const &color){
+void LinePlot::setPlotColor(unsigned int plot_id, float3 const &color){
     Plot & p = plots.at(plot_id);
     p.color[0] = color.a;
     p.color[1] = color.b;
     p.color[2] = color.c;
 }
 
-void Graph::buildGraphVBO(){
+void LinePlot::buildGraphVBO(){
     if(plot_VAO_id == 0)
     {
         glGenVertexArrays(1, &plot_VAO_id);
@@ -104,7 +104,7 @@ void Graph::buildGraphVBO(){
 
 }
 
-void Graph::buildRawVBO(){
+void LinePlot::buildRawVBO(){
     //Reserve 2 * number of points
     plot_VBO.clear();
     plot_VBO.reserve(2*currentSize);
@@ -121,15 +121,15 @@ void Graph::buildRawVBO(){
     pointsChanged=false;
 }
 
-void Graph::setAxisTickSpacing(float spacing){
+void LinePlot::setAxisTickSpacing(float spacing){
     tick_spacing = spacing;
 }
 
-void Graph::setAxisTickSize(float size){
+void LinePlot::setAxisTickSize(float size){
     tick_length = size;
 }
 
-void Graph::draw(GLint plot_VBO_location, GLint bounds_uniform_location, float *bounds, GLint color_location, bool axis_on){
+void LinePlot::draw(GLint plot_VBO_location, GLint bounds_uniform_location, float *bounds, GLint color_location, bool axis_on){
     buildGraphVBO();
     glUniform4fv(bounds_uniform_location, 1, bounds);TEST_OPENGL_ERROR();
     glBindVertexArray(plot_VAO_id);TEST_OPENGL_ERROR();
@@ -145,7 +145,7 @@ void Graph::draw(GLint plot_VBO_location, GLint bounds_uniform_location, float *
     glBindVertexArray(0);
 }
 
-void Graph::modifyPoints(unsigned int plot, unsigned int start_index, std::vector<std::pair<float, float>> const &point){
+void LinePlot::modifyPoints(unsigned int plot, unsigned int start_index, std::vector<std::pair<float, float>> const &point){
     std::copy(point.begin(), point.end(), plots.at(plot).dataPoints.begin()+start_index);
     pointsChanged = true;
 }

@@ -2,8 +2,8 @@
 // Created by "Dylan Brasseur" on 22/11/2019.
 //
 
-#ifndef DISKSPROJECT_GRAPH_H
-#define DISKSPROJECT_GRAPH_H
+#ifndef DISKSPROJECT_LINEPLOT_H
+#define DISKSPROJECT_LINEPLOT_H
 
 #include <string>
 #include <vector>
@@ -20,11 +20,11 @@ struct Plot{
     }
 };
 
-class Graph{
+class LinePlot{
 public:
     enum POSITION{TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT, CENTER};
-    Graph();
-    Graph(const std::string & xaxis_name, const std::string & yaxis_name);
+    LinePlot();
+    LinePlot(const std::string & xaxis_name, const std::string & yaxis_name);
 
     void clearDataPoints(std::string const & name);
     void clear();
@@ -39,7 +39,7 @@ public:
     void setPlotColor(unsigned int, float3 const & color);
 
     void draw(GLint plot_VBO_location, GLint bounds_uniform_location, float* bounds, GLint color_location, bool axis_on=true);
-    void drawLegend(Graph::POSITION position = TOP_RIGHT){throw implementation_error();}
+    void drawLegend(LinePlot::POSITION position = TOP_RIGHT){throw implementation_error();}
     void buildGraphVBO();
 
     void setAxisTickSpacing(float tick);
@@ -58,4 +58,4 @@ private:
     std::vector<float> plot_VBO;
 };
 
-#endif //DISKSPROJECT_GRAPH_H
+#endif //DISKSPROJECT_LINEPLOT_H
