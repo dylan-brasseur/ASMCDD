@@ -4,6 +4,10 @@
 
 #include "../include/Scene.h"
 
+#include <utility>
+
+std::vector<std::shared_ptr<Scene>> Scene::scene_list;
+
 MeshInstances::MeshInstances(std::shared_ptr<Mesh> m){
     base = std::move(m);
     instancesAmountChanged = true;
@@ -72,7 +76,7 @@ void MeshInstances::drawAsDisks(GLint offset_scale_rot_location, GLint color_uni
 
         if(instancesAmountChanged){
             //Reallocate
-            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_STREAM_DRAW);TEST_OPENGL_ERROR();
+            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_DYNAMIC_DRAW);TEST_OPENGL_ERROR();
             instancesAmountChanged=false;
             changed_indices.clear(); //We copied the whole buffer anyway
         }else if(!changed_indices.empty())
@@ -91,9 +95,9 @@ void MeshInstances::drawAsDisks(GLint offset_scale_rot_location, GLint color_uni
     glBindVertexArray(0);
 }
 
-MeshInstances & Scene::addMesh(std::shared_ptr<Mesh> const & m) {
+unsigned int Scene::addMesh(std::shared_ptr<Mesh> const & m) {
     mesh_instances.emplace_back(m);
-    return mesh_instances.back();
+    return mesh_instances.size()-1;
 }
 
 MeshInstances & Scene::getMesh(unsigned int i)
@@ -114,9 +118,28 @@ Camera &Scene::getCamera(){
     return camera;
 }
 
-void Scene::drawAsDisks(GLint offset_scale_rot_location, GLint color_location, GLint bounds_location, float* bounds){
+void Scene::drawAsDisks(GLint offset_scale_rot_location, GLint color_location, GLint bounds_location){
     glUniform4fv(bounds_location, 1, bounds);TEST_OPENGL_ERROR();
     for(auto & mi : mesh_instances)    {
         mi.drawAsDisks(offset_scale_rot_location, color_location);
     }
+}
+
+std::shared_ptr<Scene> &Scene::createScene(GLint instance_location, GLint VP_location){
+    scene_list.push_back(std::make_shared<Scene>(instance_location, VP_location));
+    return scene_list.back();
+}
+
+Scene::Scene(GLint instance_location, GLint VP_location) : camera(VP_location), instanceVBO_location(instance_location), bounds{-1, -1, 1, 1}{
+}
+
+void Scene::setBounds(float min_x, float min_y, float max_x, float max_y){
+    bounds[0] = min_x;
+    bounds[1] = min_y;
+    bounds[2] = max_x;
+    bounds[3] = max_y;
+}
+
+void Scene::addMeshInstance(unsigned int index, InstanceCoordinates ic){
+    mesh_instances.at(index).addInstance(ic);
 }

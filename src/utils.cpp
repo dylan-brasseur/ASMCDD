@@ -3,6 +3,7 @@
 //
 
 #include "../include/utils.h"
+#include "../include/Scene.h"
 #include <fstream>
 #include <memory>
 

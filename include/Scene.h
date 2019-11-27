@@ -42,13 +42,18 @@ private:
     std::vector<MeshInstances> mesh_instances;
     Camera camera;
     GLint instanceVBO_location;
+    static std::vector<std::shared_ptr<Scene>> scene_list;
+    float bounds[4];
 public:
-    explicit Scene(GLint instance_location, GLint VP_location):camera(VP_location), instanceVBO_location(instance_location){};
-    MeshInstances & addMesh(std::shared_ptr<Mesh> const & m);
+    static std::shared_ptr<Scene> & createScene(GLint instance_location, GLint VP_location);
+    Scene(GLint instance_location, GLint VP_location);
+    unsigned int addMesh(std::shared_ptr<Mesh> const & m);
     MeshInstances & getMesh(unsigned int i);
+    void addMeshInstance(unsigned int index, InstanceCoordinates);
     void draw();
-    void drawAsDisks(GLint offset_scale_rot_location, GLint color_location, GLint bounds_location, float* bounds);
+    void drawAsDisks(GLint offset_scale_rot_location, GLint color_location, GLint bounds_location);
 
+    void setBounds(float min_x, float min_y, float max_x, float max_y);
     Camera &getCamera();
 };
 

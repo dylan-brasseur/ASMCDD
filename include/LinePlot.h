@@ -38,13 +38,19 @@ public:
     [[nodiscard]] float3 getPlotColor(unsigned int plot_id) const;
     void setPlotColor(unsigned int, float3 const & color);
 
-    void draw(GLint plot_VBO_location, GLint bounds_uniform_location, float* bounds, GLint color_location, bool axis_on=true);
+    void draw(GLint plot_VBO_location, GLint bounds_uniform_location, GLint color_location, bool axis_on=true);
     void drawLegend(LinePlot::POSITION position = TOP_RIGHT){throw implementation_error();}
     void buildGraphVBO();
 
     void setAxisTickSpacing(float tick);
     void setAxisTickSize(float size);
+    void setBounds(float min_x, float min_y, float max_x, float max_y);
+
+    static std::shared_ptr<LinePlot> createLinePlot();
+
+
 private:
+    static std::vector<std::shared_ptr<LinePlot>> lineplot_list;
     void buildRawVBO();
     std::vector<Plot> plots;
     bool pointsChanged, axis_changed;
@@ -53,6 +59,7 @@ private:
 
     std::string x_axis_name, y_axis_name;
     float tick_spacing, tick_length;
+    float bounds[4];
 
     GLuint plot_VAO_id, plot_VBO_id;
     std::vector<float> plot_VBO;

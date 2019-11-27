@@ -4,7 +4,9 @@
 
 #include "../include/LinePlot.h"
 #include <algorithm>
-LinePlot::LinePlot() {
+
+std::vector<std::shared_ptr<LinePlot>> LinePlot::lineplot_list;
+LinePlot::LinePlot() : bounds{-1, -1, 1, 1}{
     plot_VAO_id = plot_VBO_id = bufferSize = currentSize = 0;
     pointsChanged = false;
     axis_changed = false;
@@ -129,7 +131,7 @@ void LinePlot::setAxisTickSize(float size){
     tick_length = size;
 }
 
-void LinePlot::draw(GLint plot_VBO_location, GLint bounds_uniform_location, float *bounds, GLint color_location, bool axis_on){
+void LinePlot::draw(GLint plot_VBO_location, GLint bounds_uniform_location, GLint color_location, bool axis_on){
     buildGraphVBO();
     glUniform4fv(bounds_uniform_location, 1, bounds);TEST_OPENGL_ERROR();
     glBindVertexArray(plot_VAO_id);TEST_OPENGL_ERROR();
@@ -150,6 +152,14 @@ void LinePlot::modifyPoints(unsigned int plot, unsigned int start_index, std::ve
     pointsChanged = true;
 }
 
+void LinePlot::setBounds(float min_x, float min_y, float max_x, float max_y){
+    bounds[0] = min_x;
+    bounds[1] = min_y;
+    bounds[2] = max_x;
+    bounds[3] = max_y;
+}
 
-
-
+std::shared_ptr<LinePlot> LinePlot::createLinePlot(){
+    lineplot_list.push_back(std::make_shared<LinePlot>());
+    return lineplot_list.back();
+}

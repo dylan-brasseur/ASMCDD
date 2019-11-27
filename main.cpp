@@ -5,15 +5,19 @@
 #include <vector>
 #include <memory>
 #include <chrono>
+#include <algorithm>
+#include <thread>
 #include "include/Shader.h"
 #include "include/Program.h"
 #include "include/Scene.h"
 #include "include/LinePlot.h"
 
+float euclidianDist(InstanceCoordinates const & a, InstanceCoordinates const & b)
+{
+    return std::sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
+}
+
 struct WindowHolder{
-    WindowHolder()=default;
-    WindowHolder(std::string  _title): title(std::move(_title)){};
-    std::string title;
     std::shared_ptr<Program> program;
     std::shared_ptr<Scene> scene;
     std::shared_ptr<LinePlot> plot;
@@ -23,27 +27,18 @@ struct WindowHolder{
 int window_width=1280; int window_height=640;
 
 enum WindowIndex : unsigned int{VIEW3D=0, DISKS_ORIGINAL=1, DISKS_CURRENT=2, PCF_ORIGINAL=3, PCF_CURRENT=4};
-static WindowHolder windows[6];
-static std::map<int, WindowIndex> ID_MAP;
+static WindowHolder windows[5];
 
 void window_resize_3D(int width, int height) {
-
     windows[VIEW3D].width = width;
     windows[VIEW3D].height = height;
     windows[VIEW3D].scene->getCamera().setAspect(float(width)/float(height));
 }
 
-void reshape_disks(int width, int height) {
-    windows[DISKS_CURRENT].height = windows[DISKS_CURRENT].width = width;
-}
-
-void reshape_pcf(int width, int height) {
-    windows[PCF_CURRENT].width = width;
-    windows[PCF_CURRENT].height = height;
-}
-
 float lightpos[] = {10.0, 10.0, 50.0};
 void display_3D() {
+    if(windows[VIEW3D].width <=0 || windows[VIEW3D].height <=0)
+        return;
     GLint program_id = windows[VIEW3D].program->use();
     glClearColor(0.4,0.4,0.4,1.0);TEST_OPENGL_ERROR();
     glScissor(windows[VIEW3D].posx,windows[VIEW3D].posy, windows[VIEW3D].width, windows[VIEW3D].height);
@@ -74,8 +69,8 @@ void timer(int value){
     nbOfMs+=ms.count()/1000;
     if(nbOfMs >= 1000)
     {
-        static char window_title[64];
-        std::sprintf(window_title,"3D view - FPS : %.1f", float(nbOfFrames*1000)/float(nbOfMs));
+        static char window_title[128];
+        std::sprintf(window_title,"Accurate Synthesis of Multi-Class Disk Distributions - FPS : %.1f", float(nbOfFrames*1000)/float(nbOfMs));
         glutSetWindowTitle(window_title);
         nbOfFrames=0;
         nbOfMs=0;
@@ -83,16 +78,15 @@ void timer(int value){
     start = end;
     glutTimerFunc(17, timer, 0);
 }
-float bounds[4] = {-3, -3, 3, 3};
-void display_current_disks(){
-    windows[DISKS_CURRENT].program->use();
+void display_disks(WindowIndex id){
+    windows[id].program->use();
     glClearColor(1.0,1.0,1.0,1.0);TEST_OPENGL_ERROR();
-    glScissor(windows[DISKS_CURRENT].posx,windows[DISKS_CURRENT].posy, windows[DISKS_CURRENT].width, windows[DISKS_CURRENT].height);
+    glScissor(windows[id].posx,windows[id].posy, windows[id].width, windows[id].height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);TEST_OPENGL_ERROR();
-    glViewport(windows[DISKS_CURRENT].posx,windows[DISKS_CURRENT].posy, windows[DISKS_CURRENT].width, windows[DISKS_CURRENT].height);
-    GLuint color_location = windows[DISKS_CURRENT].program->getUniformLocation("color");
-    GLuint bounds_location = windows[DISKS_CURRENT].program->getUniformLocation("bounds");
-    windows[DISKS_CURRENT].scene->drawAsDisks(windows[DISKS_CURRENT].program->getAttribLocation("offset_scale_rot"), color_location, bounds_location, bounds);
+    glViewport(windows[id].posx,windows[id].posy, windows[id].width, windows[id].height);
+    GLuint color_location = windows[id].program->getUniformLocation("color");
+    GLuint bounds_location = windows[id].program->getUniformLocation("bounds");
+    windows[id].scene->drawAsDisks(windows[id].program->getAttribLocation("offset_scale_rot"), color_location, bounds_location);
 }
 
 void init_GL() {
@@ -103,20 +97,20 @@ void init_GL() {
     glCullFace(GL_BACK);TEST_OPENGL_ERROR();
 }
 
-void display_current_pcf()
+void display_pcf(WindowIndex id)
 {
-    windows[PCF_CURRENT].program->use();
-    glClearColor(1.0,1.0,1.0,1.0);TEST_OPENGL_ERROR();
-    glScissor(windows[PCF_CURRENT].posx,windows[PCF_CURRENT].posy, windows[PCF_CURRENT].width, windows[PCF_CURRENT].height);
+    windows[id].program->use();
+    glClearColor(0.95,0.95,0.95,1.0);TEST_OPENGL_ERROR();
+    glScissor(windows[id].posx,windows[id].posy, windows[id].width, windows[id].height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);TEST_OPENGL_ERROR();
-    glViewport(windows[PCF_CURRENT].posx,windows[PCF_CURRENT].posy, windows[PCF_CURRENT].width, windows[PCF_CURRENT].height);
-    GLint color_location = windows[PCF_CURRENT].program->getUniformLocation("color");
-    GLint bounds_location = windows[PCF_CURRENT].program->getUniformLocation("bounds");
-    GLint VBO_location = windows[PCF_CURRENT].program->getAttribLocation("point");
-    windows[PCF_CURRENT].plot->draw(VBO_location, bounds_location, bounds, color_location);
+    glViewport(windows[id].posx,windows[id].posy, windows[id].width, windows[id].height);
+    GLint color_location = windows[id].program->getUniformLocation("color");
+    GLint bounds_location = windows[id].program->getUniformLocation("bounds");
+    GLint VBO_location = windows[id].program->getAttribLocation("point");
+    windows[id].plot->draw(VBO_location, bounds_location, color_location);
 }
 
-WindowHolder init_window(std::string const & title, int width, int height, int position_x, int position_y)
+WindowHolder init_window(int width, int height, int position_x, int position_y)
 {
     WindowHolder win;
     win.width = width;
@@ -132,8 +126,11 @@ void display_window()
     glClearColor(0.0,0.0,0.0, 1.0);TEST_OPENGL_ERROR();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);TEST_OPENGL_ERROR();
     display_3D();
-    display_current_disks();
-    display_current_pcf();
+    display_pcf(PCF_CURRENT);
+    display_pcf(PCF_ORIGINAL);
+    display_disks(DISKS_ORIGINAL);
+    display_disks(DISKS_CURRENT);
+
     glViewport(0, 0, window_width, window_height);
     glutSwapBuffers();
 }
@@ -146,13 +143,16 @@ void reshape_window(int width, int height)
         return;
     }
     window_resize_3D(std::min(width/2, width-height/2), height);
-    windows[DISKS_CURRENT].width=windows[DISKS_CURRENT].height = height/2;
-    windows[DISKS_CURRENT].posx = windows[VIEW3D].width;
+    windows[DISKS_CURRENT].width=windows[DISKS_CURRENT].height = windows[DISKS_ORIGINAL].width = windows[DISKS_ORIGINAL].height =  height/2;
+    windows[DISKS_CURRENT].posx = windows[DISKS_ORIGINAL].posx = windows[VIEW3D].width;
     windows[DISKS_CURRENT].posy = 0;
-    windows[PCF_CURRENT].width = width - windows[VIEW3D].width - windows[DISKS_CURRENT].width;
-    windows[PCF_CURRENT].height = windows[DISKS_CURRENT].height;
-    windows[PCF_CURRENT].posx = windows[DISKS_CURRENT].posx+ windows[DISKS_CURRENT].width;
+    windows[DISKS_ORIGINAL].posy = windows[DISKS_CURRENT].height;
+
+    windows[PCF_CURRENT].width = windows[PCF_ORIGINAL].width = width - windows[VIEW3D].width - windows[DISKS_CURRENT].width;
+    windows[PCF_CURRENT].height = windows[PCF_ORIGINAL].height = windows[DISKS_CURRENT].height;
+    windows[PCF_CURRENT].posx = windows[PCF_ORIGINAL].posx = windows[DISKS_CURRENT].posx+ windows[DISKS_CURRENT].width;
     windows[PCF_CURRENT].posy=0;
+    windows[PCF_ORIGINAL].posy = windows[DISKS_CURRENT].height;
 
     window_width = width;
     window_height = height;
@@ -162,15 +162,17 @@ void init_glut(int &argc, char *argv[]) {
     glutInit(&argc, argv);
     glutSetOption(GLUT_RENDERING_CONTEXT ,GLUT_USE_CURRENT_CONTEXT);
     glutInitContextVersion(4,5);
-    glutInitContextProfile(GLUT_CORE_PROFILE | GLUT_DEBUG);
+    glutInitContextProfile(GLUT_CORE_PROFILE);
 
     glutInitDisplayMode(GLUT_RGBA|GLUT_DOUBLE|GLUT_DEPTH);
     glutInitWindowSize(1280, 640);
-    glutCreateWindow("test");
+    glutCreateWindow("Accurate Synthesis of Multi-Class Disk Distributions");
 
-    windows[VIEW3D] = init_window("Current 3D View", 640, 640, 0, 0);
-    windows[DISKS_CURRENT] = init_window("Current Disks", 320, 320, 640, 0);
-    windows[PCF_CURRENT] = init_window("Current PCF", 320, 320, 960, 0);
+    windows[VIEW3D] = init_window(640, 640, 0, 0);
+    windows[DISKS_CURRENT] = init_window( 320, 320, 640, 0);
+    windows[PCF_CURRENT] = init_window( 320, 320, 960, 0);
+    windows[DISKS_ORIGINAL] = init_window( 320, 320, 640, 320);
+    windows[PCF_ORIGINAL] = init_window( 320, 320, 960, 320);
 
     glutDisplayFunc(display_window);
     glutReshapeFunc(reshape_window);
@@ -194,7 +196,7 @@ bool init_shaders() {
     auto fragment_shader_disks = Shader::createShader(GL_FRAGMENT_SHADER, "shaders/Disks.frag");
     auto geometry_shader_disks = Shader::createShader(GL_GEOMETRY_SHADER, "shaders/Disks.geom");
 
-    geometry_shader_disks->replace_in_shader("NB_V_DISK", "32");
+    geometry_shader_disks->replace_in_shader("NB_V_DISK", "16");
 
     auto vertex_shader_plot = Shader::createShader(GL_VERTEX_SHADER, "shaders/Plot.vert");
     auto fragment_shader_plot = Shader::createShader(GL_FRAGMENT_SHADER, "shaders/Plot.frag");
@@ -214,9 +216,9 @@ bool init_shaders() {
     program_Disks->attach(fragment_shader_disks);
     program_Disks->attach(geometry_shader_disks);
 
-    windows[PCF_CURRENT].program = Program::createProgram("Plot program");
-    windows[PCF_CURRENT].program->attach(vertex_shader_plot);
-    windows[PCF_CURRENT].program->attach(fragment_shader_plot);
+    auto program_PCF = Program::createProgram("Plot program");
+    program_PCF->attach(vertex_shader_plot);
+    program_PCF->attach(fragment_shader_plot);
 
     if(!Program::linkAll())
     {
@@ -226,18 +228,21 @@ bool init_shaders() {
 
     windows[VIEW3D].program=program_3D;
     windows[DISKS_CURRENT].program=program_Disks;
+    windows[PCF_CURRENT].program=program_PCF;
+    windows[DISKS_ORIGINAL].program=program_Disks;
+    windows[PCF_ORIGINAL].program=program_PCF;
     return true;
 }
 
 int main(int argc, char *argv[]) {
+    srand(time(nullptr));
     init_glut(argc, argv);
     init_GL();
     if (!init_glew())
         std::exit(-1);
     if(!init_shaders())
         return EXIT_FAILURE;
-    auto p = Program::getProgramList().at(0);
-    if(!p->addAttribLocations("position", "normal", "color", "offset_scale_rot") || !p->addUniformLocations("MVP")){
+    if(!windows[VIEW3D].program->addAttribLocations("position", "normal", "color", "offset_scale_rot") || !windows[VIEW3D].program->addUniformLocations("MVP")){
         std::cerr << "Bad attribute location 3D program" << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -245,30 +250,38 @@ int main(int argc, char *argv[]) {
     auto mushroom = Mesh::createmesh("models/champi.ply", true);
     auto grass = Mesh::createmesh("models/grass.ply", true);
     auto tree = Mesh::createmesh("models/ptree.ply", true);
-    mushroom->centerAndScaleToUnit(true, false, true);
-    grass->centerAndScaleToUnit(true, false, true);
-    grass->restOnY(0);
-    mushroom->restOnY(0);
-    mushroom->buildRawArrays();
-    grass->buildRawArrays();
 
-    mushroom->buildMeshVBOs(p->getAttribLocation("position"), p->getAttribLocation("normal"), p->getAttribLocation("color"));
-    grass->buildMeshVBOs(p->getAttribLocation("position"), p->getAttribLocation("normal"), p->getAttribLocation("color"));
-    windows[VIEW3D].scene = std::make_shared<Scene>(p->getAttribLocation("offset_scale_rot"), p->getUniformLocation("MVP"));
+    for(auto & m : Mesh::getMeshList()){
+        m->centerAndScaleToUnit(true, false, true);
+        m->restOnY(0);
+        m->buildRawArrays();
+        m->buildMeshVBOs(windows[VIEW3D].program->getAttribLocation("position"), windows[VIEW3D].program->getAttribLocation("normal"), windows[VIEW3D].program->getAttribLocation("color"));
+    }
+
+    windows[VIEW3D].scene = Scene::createScene(windows[VIEW3D].program->getAttribLocation("offset_scale_rot"), windows[VIEW3D].program->getUniformLocation("MVP"));
+    windows[VIEW3D].scene->setBounds(-3, -3, 3, 3);
     auto & camera = windows[VIEW3D].scene->getCamera();
     camera.setAspect(1);
     camera.setFOV(75);
     camera.lookAt(0,0,0);
-    camera.setPosition(3,3,3);
+    camera.setPosition(0,3,-3);
     camera.setUp(0,1,0);
     camera.setDepthLimits(0.1, 100);
-    auto & mi = windows[VIEW3D].scene->addMesh(mushroom);
-    mi.addInstance({0,0,0.1, 0});
-    mi.addInstance({1,0, 0.1, 0.5});
-    mi.setColor(1.0, 0.0, 0.0);
-    auto & mi2 = windows[VIEW3D].scene->addMesh(grass);
-    mi2.addInstance({-1, 0.0f, 0.1, 0.5f});
-    mi2.setColor(0.0, 1.0, 0.0);
+
+    unsigned int mi = windows[VIEW3D].scene->addMesh(mushroom);
+    windows[VIEW3D].scene->addMeshInstance(mi, {0,0,0.1, 0});
+    windows[VIEW3D].scene->addMeshInstance(mi, {1,0, 0.1, 0.5});
+    windows[VIEW3D].scene->getMesh(mi).setColor(1.0, 0.0, 0.0);
+
+    mi = windows[VIEW3D].scene->addMesh(grass);
+    windows[VIEW3D].scene->addMeshInstance(mi, {-1, 0.0f, 0.1, 0.5f});
+    windows[VIEW3D].scene->getMesh(mi).setColor(0.0, 1.0, 0.0);
+
+    mi = windows[VIEW3D].scene->addMesh(tree);
+    windows[VIEW3D].scene->addMeshInstance(mi, {0.0f, 1.0f, 1.0f, 0.3f});
+    windows[VIEW3D].scene->addMeshInstance(mi, {2.0f, 1.0f, 1.0f, 0.3f});
+    windows[VIEW3D].scene->getMesh(mi).setColor(0.7f, 0.3f, 0.0f);
+
     if(!windows[DISKS_CURRENT].program->addAttribLocations("offset_scale_rot") || !windows[DISKS_CURRENT].program->addUniformLocations("bounds", "color")){
         std::cerr << "Bad attribute location Disks program" << std::endl;
         exit(EXIT_FAILURE);
@@ -280,14 +293,66 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     windows[DISKS_CURRENT].scene = windows[VIEW3D].scene;
-    glLineWidth(2);
+    windows[DISKS_ORIGINAL].program = windows[DISKS_CURRENT].program;
+    windows[DISKS_ORIGINAL].scene = Scene::createScene(0,0);
+    windows[DISKS_ORIGINAL].scene->setBounds(-3, -3, 3, 3);
+
+    std::vector<InstanceCoordinates> grassTestInstances, treeTestInstances, champisTestInstances;
+    //10 tree, 50 champis, 430 grass
+#define randf(min, max) (float((max)-(min))*float(rand())/float(RAND_MAX) + float(min))
+    float treebias = 0.05, grassbias = 0.001, champibias = 0.01;
+    for(int i=0; i<1000; i++)
+    {
+        InstanceCoordinates coords{randf(-2.6, 2.6), randf(-2.6, 2.6), randf(0.45, 0.55), randf(0, 6)};
+        if(std::none_of(treeTestInstances.begin(), treeTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+treebias;}))
+        {
+            treeTestInstances.push_back(coords);
+            if(treeTestInstances.size() == 10)
+                break;
+        }
+    }
+    for(int i=0; i<5000; i++)
+    {
+        int treeidx = rand()%treeTestInstances.size();
+        float size = randf(0.04, 0.08);
+        float theta = randf(0, 2*M_PI);
+        float r = randf(0.2*treeTestInstances[treeidx].s+size, 0.95*treeTestInstances[treeidx].s-size);
+        InstanceCoordinates coords{treeTestInstances[treeidx].x+r*std::cos(theta), treeTestInstances[treeidx].y+r*std::sin(theta), size, randf(0, 2*M_PI)};
+        if(std::none_of(champisTestInstances.begin(), champisTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+champibias;}))
+        {
+            champisTestInstances.push_back(coords);
+            if(champisTestInstances.size() == 50)
+                break;
+        }
+    }
+    for(int i=0; i<430000; i++)
+    {
+        InstanceCoordinates coords{randf(-3, 3), randf(-3, 3), randf(0.04, 0.06), randf(0, 2*M_PI)};
+        if(std::none_of(treeTestInstances.begin(), treeTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+3*grassbias;})
+        && std::none_of(grassTestInstances.begin(), grassTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+grassbias;})){
+            grassTestInstances.push_back(coords);
+            if(grassTestInstances.size() == 430)
+                break;
+        }
+    }
+    unsigned int grassInstances =  windows[DISKS_ORIGINAL].scene->addMesh(grass);
+    unsigned int treeInstances =  windows[DISKS_ORIGINAL].scene->addMesh(tree);
+    unsigned int champisInstances =  windows[DISKS_ORIGINAL].scene->addMesh(mushroom);
+    windows[DISKS_ORIGINAL].scene->getMesh(treeInstances).setColor(0.7, 0.4, 0);
+    std::for_each(treeTestInstances.begin(), treeTestInstances.end(), [&](auto & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(treeInstances,ic);});
+    windows[DISKS_ORIGINAL].scene->getMesh(champisInstances).setColor(1.0, 0, 0);
+    std::for_each(champisTestInstances.begin(), champisTestInstances.end(), [&](auto & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(champisInstances,ic);});
+    windows[DISKS_ORIGINAL].scene->getMesh(grassInstances).setColor(0, 1.0, 0);
+    std::for_each(grassTestInstances.begin(), grassTestInstances.end(), [&](auto & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(grassInstances,ic);});
+
+    glLineWidth(1);
     glEnable(GL_LINE_SMOOTH);
-    const unsigned char* vendor = glGetString(GL_VENDOR);
     const unsigned char* renderer = glGetString(GL_RENDERER);
 
-    std::cout << "Running " << (argc > 0 ? argv[0] : "program") << " on " << renderer << "from " << vendor << std::endl;
+    std::cout << "Running " << (argc > 0 ? argv[0] : "program") << " on " << renderer << std::endl;
 
-    auto & plot = windows[PCF_CURRENT].plot = std::make_shared<LinePlot>();
+    auto & plot = windows[PCF_CURRENT].plot = LinePlot::createLinePlot();
+    auto & plot_o = windows[PCF_ORIGINAL].plot = LinePlot::createLinePlot();
     unsigned int id = plot->addPlot("test");
     plot->addDataPoint(id, std::make_pair<float, float>(0, 1));
     plot->addDataPoint(id, std::make_pair<float, float>(1, 2));
@@ -298,7 +363,15 @@ int main(int argc, char *argv[]) {
     plot->addDataPoint(id, std::make_pair<float, float>(1, 2));
     plot->addDataPoint(id, std::make_pair<float, float>(2, 1));
     plot->setPlotColor(id, {1, 0, 0});
+
+    id = plot_o->addPlot("test3");
+    plot_o->addDataPoint(id, std::make_pair<float, float>(-1, 1));
+    plot_o->addDataPoint(id, std::make_pair<float, float>(-0, -5));
+    plot_o->setPlotColor(id, {0,0,1});
+
     start = std::chrono::high_resolution_clock::now();
     glutTimerFunc(16, timer, 0);
-    glutMainLoop();
+    std::thread renderThread(glutMainLoop);
+    plot->setBounds(-0.05, -0.05, 3, 3);
+    renderThread.join();
 }
