@@ -29,4 +29,15 @@ public:
     implementation_error() : std::logic_error("Function not yet implemented") { };
 };
 
+struct Disk{
+    Disk(float _x, float _y, float _r): x(_x), y(_y), r(_r){};
+    float x, y, r;
+};
+
+template<typename T>
+T clip(T a, T min, T max)
+{
+    return std::min(std::max(a, min), max);
+}
+
 #endif //UTILS_H

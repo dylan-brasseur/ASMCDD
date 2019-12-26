@@ -47,7 +47,7 @@ unsigned int LinePlot::addDataPoint(unsigned int plot_id, std::pair<float, float
 }
 
 unsigned int LinePlot::addDataPoints(unsigned int plot_id, std::vector<std::pair<float, float>> const &points){
-    auto plot = plots.at(plot_id);
+    auto & plot = plots.at(plot_id);
     plot.dataPoints.reserve(plot.dataPoints.size()+points.size());
     for(auto & p : points)
     {

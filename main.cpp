@@ -11,11 +11,7 @@
 #include "include/Program.h"
 #include "include/Scene.h"
 #include "include/LinePlot.h"
-
-float euclidianDist(InstanceCoordinates const & a, InstanceCoordinates const & b)
-{
-    return std::sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
-}
+#include "include/ASMCDD.h"
 
 struct WindowHolder{
     std::shared_ptr<Program> program;
@@ -55,7 +51,7 @@ void anim(){
     lightpos[0] = 10*std::cos(anim);
     lightpos[1] = 0;
     lightpos[2] = 10*std::sin(anim);
-    windows[VIEW3D].scene->getMesh(0).modifyInstance(1, {2*std::sin(0.3f*anim), 2*std::cos(0.3f*anim), 0.1f+0.02f*std::sin(anim), 0.7f*anim});
+    //windows[VIEW3D].scene->getMesh(0).modifyInstance(1, {2*std::sin(0.3f*anim), 2*std::cos(0.3f*anim), 0.1f+0.02f*std::sin(anim), 0.7f*anim});
     glutPostRedisplay();
 }
 std::chrono::time_point start = std::chrono::high_resolution_clock::now();
@@ -249,7 +245,7 @@ int main(int argc, char *argv[]) {
 
     auto mushroom = Mesh::createmesh("models/champi.ply", true);
     auto grass = Mesh::createmesh("models/grass.ply", true);
-    auto tree = Mesh::createmesh("models/ptree.ply", true);
+    auto tree = Mesh::createmesh("models/tree.ply", true);
 
     for(auto & m : Mesh::getMeshList()){
         m->centerAndScaleToUnit(true, false, true);
@@ -259,28 +255,14 @@ int main(int argc, char *argv[]) {
     }
 
     windows[VIEW3D].scene = Scene::createScene(windows[VIEW3D].program->getAttribLocation("offset_scale_rot"), windows[VIEW3D].program->getUniformLocation("MVP"));
-    windows[VIEW3D].scene->setBounds(-3, -3, 3, 3);
+    windows[VIEW3D].scene->setBounds(0, 0, 1, 1);
     auto & camera = windows[VIEW3D].scene->getCamera();
     camera.setAspect(1);
-    camera.setFOV(75);
-    camera.lookAt(0,0,0);
-    camera.setPosition(0,3,-3);
+    camera.setFOV(60);
+    camera.lookAt(0.5,0,0.5);
+    camera.setPosition(0.5,0.75,-0.5);
     camera.setUp(0,1,0);
     camera.setDepthLimits(0.1, 100);
-
-    unsigned int mi = windows[VIEW3D].scene->addMesh(mushroom);
-    windows[VIEW3D].scene->addMeshInstance(mi, {0,0,0.1, 0});
-    windows[VIEW3D].scene->addMeshInstance(mi, {1,0, 0.1, 0.5});
-    windows[VIEW3D].scene->getMesh(mi).setColor(1.0, 0.0, 0.0);
-
-    mi = windows[VIEW3D].scene->addMesh(grass);
-    windows[VIEW3D].scene->addMeshInstance(mi, {-1, 0.0f, 0.1, 0.5f});
-    windows[VIEW3D].scene->getMesh(mi).setColor(0.0, 1.0, 0.0);
-
-    mi = windows[VIEW3D].scene->addMesh(tree);
-    windows[VIEW3D].scene->addMeshInstance(mi, {0.0f, 1.0f, 1.0f, 0.3f});
-    windows[VIEW3D].scene->addMeshInstance(mi, {2.0f, 1.0f, 1.0f, 0.3f});
-    windows[VIEW3D].scene->getMesh(mi).setColor(0.7f, 0.3f, 0.0f);
 
     if(!windows[DISKS_CURRENT].program->addAttribLocations("offset_scale_rot") || !windows[DISKS_CURRENT].program->addUniformLocations("bounds", "color")){
         std::cerr << "Bad attribute location Disks program" << std::endl;
@@ -295,83 +277,99 @@ int main(int argc, char *argv[]) {
     windows[DISKS_CURRENT].scene = windows[VIEW3D].scene;
     windows[DISKS_ORIGINAL].program = windows[DISKS_CURRENT].program;
     windows[DISKS_ORIGINAL].scene = Scene::createScene(0,0);
-    windows[DISKS_ORIGINAL].scene->setBounds(-3, -3, 3, 3);
 
-    std::vector<InstanceCoordinates> grassTestInstances, treeTestInstances, champisTestInstances;
-    //10 tree, 50 champis, 430 grass
-#define randf(min, max) (float((max)-(min))*float(rand())/float(RAND_MAX) + float(min))
-    float treebias = 0.05, grassbias = 0.001, champibias = 0.01;
-    for(int i=0; i<1000; i++)
-    {
-        InstanceCoordinates coords{randf(-2.6, 2.6), randf(-2.6, 2.6), randf(0.45, 0.55), randf(0, 6)};
-        if(std::none_of(treeTestInstances.begin(), treeTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+treebias;}))
-        {
-            treeTestInstances.push_back(coords);
-            if(treeTestInstances.size() == 10)
-                break;
-        }
-    }
-    for(int i=0; i<5000; i++)
-    {
-        int treeidx = rand()%treeTestInstances.size();
-        float size = randf(0.04, 0.08);
-        float theta = randf(0, 2*M_PI);
-        float r = randf(0.2*treeTestInstances[treeidx].s+size, 0.95*treeTestInstances[treeidx].s-size);
-        InstanceCoordinates coords{treeTestInstances[treeidx].x+r*std::cos(theta), treeTestInstances[treeidx].y+r*std::sin(theta), size, randf(0, 2*M_PI)};
-        if(std::none_of(champisTestInstances.begin(), champisTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+champibias;}))
-        {
-            champisTestInstances.push_back(coords);
-            if(champisTestInstances.size() == 50)
-                break;
-        }
-    }
-    for(int i=0; i<430000; i++)
-    {
-        InstanceCoordinates coords{randf(-3, 3), randf(-3, 3), randf(0.04, 0.06), randf(0, 2*M_PI)};
-        if(std::none_of(treeTestInstances.begin(), treeTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+3*grassbias;})
-        && std::none_of(grassTestInstances.begin(), grassTestInstances.end(), [&](InstanceCoordinates ic){return euclidianDist(ic, coords) <= ic.s+coords.s+grassbias;})){
-            grassTestInstances.push_back(coords);
-            if(grassTestInstances.size() == 430)
-                break;
-        }
-    }
+
+    ASMCDD orig("examples/forest_small.txt");
+
+    orig.save();
+    auto & disks = orig.getSavedDisks();
     unsigned int grassInstances =  windows[DISKS_ORIGINAL].scene->addMesh(grass);
     unsigned int treeInstances =  windows[DISKS_ORIGINAL].scene->addMesh(tree);
     unsigned int champisInstances =  windows[DISKS_ORIGINAL].scene->addMesh(mushroom);
     windows[DISKS_ORIGINAL].scene->getMesh(treeInstances).setColor(0.7, 0.4, 0);
-    std::for_each(treeTestInstances.begin(), treeTestInstances.end(), [&](auto & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(treeInstances,ic);});
-    windows[DISKS_ORIGINAL].scene->getMesh(champisInstances).setColor(1.0, 0, 0);
-    std::for_each(champisTestInstances.begin(), champisTestInstances.end(), [&](auto & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(champisInstances,ic);});
+    std::for_each(disks[0].begin(), disks[0].end(), [&](Disk & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(treeInstances, {ic.x, ic.y, ic.r, 0});});
     windows[DISKS_ORIGINAL].scene->getMesh(grassInstances).setColor(0, 1.0, 0);
-    std::for_each(grassTestInstances.begin(), grassTestInstances.end(), [&](auto & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(grassInstances,ic);});
-
-    glLineWidth(1);
+    std::for_each(disks[1].begin(), disks[1].end(), [&](Disk & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(grassInstances,{ic.x, ic.y, ic.r, 0});});
+    windows[DISKS_ORIGINAL].scene->getMesh(champisInstances).setColor(1.0, 0, 0);
+    std::for_each(disks[2].begin(), disks[2].end(), [&](Disk & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(champisInstances,{ic.x, ic.y, ic.r, 0});});
+    windows[DISKS_ORIGINAL].scene->setBounds(0,0 , 1, 1);
+    glLineWidth(2);
     glEnable(GL_LINE_SMOOTH);
     const unsigned char* renderer = glGetString(GL_RENDERER);
 
+    orig.addClassDependency(0,0);
+    orig.addClassDependency(0,1);
+    orig.addClassDependency(0,2);
+    orig.addClassDependency(1,1);
+    orig.addClassDependency(2,2);
+    orig.computePCF();
+    orig.save();
+    auto pcfs = orig.getSavedInteractions();
+
     std::cout << "Running " << (argc > 0 ? argv[0] : "program") << " on " << renderer << std::endl;
 
-    auto & plot = windows[PCF_CURRENT].plot = LinePlot::createLinePlot();
-    auto & plot_o = windows[PCF_ORIGINAL].plot = LinePlot::createLinePlot();
-    unsigned int id = plot->addPlot("test");
-    plot->addDataPoint(id, std::make_pair<float, float>(0, 1));
-    plot->addDataPoint(id, std::make_pair<float, float>(1, 2));
-    plot->addDataPoint(id, std::make_pair<float, float>(2, 3));
-    plot->setPlotColor(id, {0, 1, 0});
-    id = plot->addPlot("test2");
-    plot->addDataPoint(id, std::make_pair<float, float>(0, 3));
-    plot->addDataPoint(id, std::make_pair<float, float>(1, 2));
-    plot->addDataPoint(id, std::make_pair<float, float>(2, 1));
-    plot->setPlotColor(id, {1, 0, 0});
+    windows[PCF_ORIGINAL].plot = LinePlot::createLinePlot();
+    char text[16] = "";
+    float3 colors[5] = {{0,0,1}, {1, 0.8, 0}, {0.5, 0.2, 0}, {0, 0.5, 0}, {1, 0, 0}};
+    for(unsigned long k = 0; k<pcfs.size(); k++)
+    {
+        std::sprintf(text, "%d", k);
+        unsigned int id = windows[PCF_ORIGINAL].plot->addPlot(text);
+        for(unsigned long i=0; i<pcfs[k].meanPCF.size(); i++)
+        {
+            float a = pcfs[k].meanPCF[i];
+            windows[PCF_ORIGINAL].plot->addDataPoint(id, std::make_pair(pcfs[k].radii[i], a));
+        }
+        windows[PCF_ORIGINAL].plot->setPlotColor(id, colors[k]);
+    }
 
-    id = plot_o->addPlot("test3");
-    plot_o->addDataPoint(id, std::make_pair<float, float>(-1, 1));
-    plot_o->addDataPoint(id, std::make_pair<float, float>(-0, -5));
-    plot_o->setPlotColor(id, {0,0,1});
+    windows[PCF_ORIGINAL].plot->setBounds(0,0,5, 2);
+
+
+    ASMCDD_new current;
+    unsigned long tree_id = current.addTargetClass(disks[0]);
+    unsigned long grass_id = current.addTargetClass(disks[1]);
+    unsigned long mush_id = current.addTargetClass(disks[2]);
+    current.addDependency(tree_id, grass_id);
+    current.addDependency(tree_id, mush_id);
+    current.computeTarget();
+    current.initialize(1, 0.005);
+    auto plot = current.getCurrentPCFplot();
+    std::map<std::pair<unsigned long, unsigned long>, float3> colormap;
+    colormap.insert_or_assign(std::make_pair(tree_id, tree_id), colors[0]);
+    colormap.insert_or_assign(std::make_pair(tree_id, grass_id), colors[1]);
+    colormap.insert_or_assign(std::make_pair(tree_id, mush_id), colors[2]);
+    colormap.insert_or_assign(std::make_pair(grass_id, grass_id), colors[3]);
+    colormap.insert_or_assign(std::make_pair(mush_id, mush_id), colors[4]);
+
+
+    windows[PCF_CURRENT].plot = LinePlot::createLinePlot();
+    for(auto const & p : plot)
+    {
+        std::sprintf(text, "%lu %lu", p.first.first, p.first.second);
+        unsigned int id = windows[PCF_CURRENT].plot->addPlot(text);
+        windows[PCF_CURRENT].plot->addDataPoints(id, p.second);
+        windows[PCF_CURRENT].plot->setPlotColor(id, colormap.at(p.first));
+    }
+
+    windows[PCF_CURRENT].plot->setBounds(0,0,5, 2);
+
+    std::vector<Disk> currDisks;
+    unsigned int mi = windows[VIEW3D].scene->addMesh(mushroom);
+    windows[VIEW3D].scene->getMesh(mi).setColor(1.0, 0.0, 0.0);
+    currDisks = current.getCurrentDisks(mush_id);
+    std::for_each(currDisks.begin(), currDisks.end(), [&](Disk & ic){windows[VIEW3D].scene->addMeshInstance(mi, {ic.x, ic.y, ic.r, 0});});
+    mi = windows[VIEW3D].scene->addMesh(grass);
+    windows[VIEW3D].scene->getMesh(mi).setColor(0.0, 1.0, 0.0);
+    currDisks = current.getCurrentDisks(grass_id);
+    std::for_each(currDisks.begin(), currDisks.end(), [&](Disk & ic){windows[VIEW3D].scene->addMeshInstance(mi, {ic.x, ic.y, ic.r, 0});});
+    mi = windows[VIEW3D].scene->addMesh(tree);
+    windows[VIEW3D].scene->getMesh(mi).setColor(0.7f, 0.3f, 0.0f);
+    currDisks = current.getCurrentDisks(tree_id);
+    std::for_each(currDisks.begin(), currDisks.end(), [&](Disk & ic){windows[VIEW3D].scene->addMeshInstance(mi, {ic.x, ic.y, ic.r, 0});});
 
     start = std::chrono::high_resolution_clock::now();
     glutTimerFunc(16, timer, 0);
     std::thread renderThread(glutMainLoop);
-    plot->setBounds(-0.05, -0.05, 3, 3);
     renderThread.join();
 }
