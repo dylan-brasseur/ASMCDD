@@ -26,14 +26,16 @@ public:
     LinePlot();
     LinePlot(const std::string & xaxis_name, const std::string & yaxis_name);
 
-    void clearDataPoints(std::string const & name);
+    void clearDataPoints(unsigned int plot_id);
+    void replacePoints(unsigned int plot_id, std::vector<std::pair<float, float>> const & points);
     void clear();
-    unsigned int addPlot(const std::string & name);
+    unsigned int addPlot(const std::string & name, unsigned long category_a, unsigned long category_b);
     unsigned int addDataPoint(unsigned int plot_id, std::pair<float, float> const & point);
     unsigned int addDataPoints(unsigned int plot_id, std::vector<std::pair<float, float>> const & points);
     void modifyPoint(unsigned int plot, unsigned int index, std::pair<float, float> const & point);
     void modifyPoints(unsigned int plot, unsigned int start_index, std::vector<std::pair<float, float>> const & point);
     void removeDataPoints(unsigned int plot_id, unsigned int start, unsigned int end);
+    unsigned long getIdFromRelation(std::pair<unsigned long, unsigned long> relation);
 
     [[nodiscard]] float3 getPlotColor(unsigned int plot_id) const;
     void setPlotColor(unsigned int, float3 const & color);
@@ -53,6 +55,7 @@ private:
     static std::vector<std::shared_ptr<LinePlot>> lineplot_list;
     void buildRawVBO();
     std::vector<Plot> plots;
+    std::map<std::pair<unsigned long, unsigned long>, unsigned long> indexFromRelation;
     bool pointsChanged, axis_changed;
     unsigned long long int bufferSize;
     unsigned long long int currentSize;

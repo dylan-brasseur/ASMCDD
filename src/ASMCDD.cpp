@@ -12,6 +12,7 @@
 #include <chrono>
 #include "../include/ASMCDD.h"
 
+std::mutex Category::disks_access;
 
 template<typename T>
 constexpr inline T max(T a, T b)
@@ -35,319 +36,31 @@ inline float gaussian_kernel(float sigma, float x)
     return std::exp(-((x*x)/(sigma*sigma)))/(sqrtpi*sigma);
 }
 
-float ClassInteraction::disk_distance(Disk const & a, Disk const & b, float rmax){
-    float r1, r2;
-    if(a.r > b.r)
-    {
-        r1 = a.r;
-        r2 = b.r;
-    }else
-    {
-        r1 = b.r;
-        r2 = a.r;
-    }
-    r1*=rmax;
-    r2*=rmax;
-    float d = euclidian(a,b)*rmax;
-    float extent = std::max(d+r1+r2, 2*r1);
-    float overlap = clip(r1+r2-d, 0.0f, 2*r2);
-    float f = (extent-overlap+d+r1-r2);
-    if(d <= r1-r2)
-    {
-        return f/(4*r1 - 4*r2);
-    }else if(d <= r1+r2)
-    {
-        return (f - 4*r1 + 7*r2)/(3*r2);
-    }else{
-        return f - 4*r1 - 2*r2 + 3;
-    }
-}
-
 //Returns the proportion of the circle perimeter that is in the [0, 1] domain
-float perimeter_weight(float x, float y, float r)
+float perimeter_weight(double x, double y, double r)
 {
     //We assume the domain is [0, 1] on all sides
     //Assuming the center x, y is in [0,1]
-    float full_perimeter = float(2.0*M_PI)*r;
-    float current_perimeter = full_perimeter;
-    if(x+r > 1)
+
+    double full_angle = 2*M_PI;
+    const std::pair<double, double> deltas[] = {{x, y}, {1-x, y}, {y, x}, {1-y, x}};
+    for(const auto & delta : deltas)
     {
-        //Right bound intersection
-        float i = std::acos(clip((1-x)/r, -1.0f, 1.0f));
-        float max = std::atan2(1-y, 1-x);
-        float min = std::atan2(-y, 1-x);
-        current_perimeter -= (std::min(i, max) - std::max(-i, min))*r;
+        double dx = delta.first;
+        if(dx < r)
+        {
+            double dy = delta.second;
+            double alpha =std::acos(dx/r);
+            full_angle-= std::min(alpha, std::atan2(dy, dx)) + std::min(alpha, std::atan2((1-dy), dx));
+        }
     }
-    if(y+r > 1)
-    {
-        //Upper bound intersection
-        float i = std::acos(clip((1-y)/r, -1.0f, 1.0f));
-        float max = std::atan2(x, 1-y);
-        float min = std::atan2(-(1-x), 1-y);
-        current_perimeter -= (std::min(i, max) - std::max(-i, min))*r;
-    }
-    if(x < r)
-    {
-        //Left bound intersection
-        float i = std::acos(clip(x/r, -1.0f, 1.0f));
-        float max = std::atan2(y, x);
-        float min = std::atan2(-(1-y), 1-x);
-        current_perimeter -= (std::min(i, max) - std::max(-i, min))*r;
-    }
-    if(y < r)
-    {
-        //Lower bound intersection
-        float i = std::acos(clip(y/r, -1.0f, 1.0f));
-        float max = std::atan2((1-x), 1-y);
-        float min = std::atan2(-x, 1-y);
-        current_perimeter -= (std::min(i, max) - std::max(-i, min))*r;
-    }
-    return clip<float>(current_perimeter/full_perimeter, 0, 1);
+    return clip(full_angle/(2*M_PI), 0.0, 1.0);
 }
 
 float perimeter_weight(float x, float y, float r, float diskfact)
 {
     return perimeter_weight(x/diskfact, y/diskfact, r/diskfact);
 }
-
-std::vector<unsigned int> getTopologicalOrder(std::vector<ClassInteraction> const & target)
-{
-    std::map<unsigned int, std::vector<unsigned int>> nodes;
-
-    for(auto && ci : target)
-    {
-        if(nodes.find(ci.class_a) == nodes.end())
-        {
-            nodes.insert(std::make_pair(ci.class_a, std::vector<unsigned int>()));
-        }
-        if(ci.class_a != ci.class_b){
-            if(nodes.find(ci.class_b) == nodes.end())
-            {
-                nodes.insert(std::make_pair(ci.class_b, std::vector<unsigned int>()));
-            }
-            nodes[ci.class_a].push_back(ci.class_b);
-        }
-    }
-
-    if(nodes.empty())
-        return std::vector<unsigned int>();
-
-    std::vector<unsigned int> degrees;
-    degrees.resize(nodes.size(), 0);
-    for(auto && n : nodes)
-    {
-        for(unsigned int e : n.second)
-        {
-            degrees[e]++;
-        }
-    }
-
-    std::queue<unsigned int> q;
-    for(unsigned long i=0; i<degrees.size();i++)
-    {
-        if(degrees[i]==0)
-            q.push(i);
-    }
-
-    std::vector<unsigned int> top_order;
-    while(!q.empty())
-    {
-        unsigned int u = q.front();
-        q.pop();
-        top_order.push_back(u);
-
-        for(unsigned int e : nodes[u])
-        {
-            if(--degrees[e] == 0)
-            {
-                q.push(e);
-            }
-        }
-    }
-    return top_order;
-}
-
-
-
-void ClassInteraction::computePCF(std::vector<Disk> const &disks_a, std::vector<Disk> const &disks_b, float rmax, float step,
-                                  float sigma, float limit, bool same_class){
-    //We assume the disks are in a [0,1]^2 domain
-    discardPCFs();
-
-    int nSteps = int((limit/rmax)/step);
-
-    meanPCF.resize(nSteps, 0);
-    maxPCF.resize(nSteps, 0);
-    minPCF.resize(nSteps, 0);
-    radii.resize(nSteps);
-
-    if(disks_a.empty() || disks_b.empty())
-        return;
-
-
-    std::vector<float> area;
-    area.resize(nSteps);
-
-    //Radii computation
-    for(int i=0; i<nSteps; i++)
-    {
-        radii[i] = (i+1)*step;
-    }
-
-    //Area computation
-    for(unsigned long i=0; i<radii.size(); i++)
-    {
-        float & r = radii[i];
-        float outer = (r+0.5f)*rmax;
-        float inner = max((r-0.5f)*rmax, 0.f);
-        area[i] = M_PI*(outer*outer - inner*inner);
-    }
-
-    //Perimeter computation
-    std::vector<std::vector<float>> perimeter;
-    perimeter.resize(disks_a.size());
-    for(unsigned long i=0; i<disks_a.size(); i++){
-        perimeter[i].resize(radii.size());
-        const Disk & d = disks_a[i];
-        for(unsigned long j=0; j<radii.size(); j++)
-        {
-            perimeter[i][j] = perimeter_weight(d.x, d.y, radii[j]*rmax);
-        }
-    }
-
-
-    std::vector<float> current_PCF;
-    current_PCF.resize(radii.size());
-    std::vector<float> sumContrib(radii.size());
-
-    //Compute PCF
-    for(unsigned long i=0; i<disks_a.size(); i++)
-    {
-        std::fill(current_PCF.begin(), current_PCF.end(), 0);
-        std::fill(sumContrib.begin(), sumContrib.end(), 0);
-        const Disk & pi = disks_a[i];
-        for(unsigned long j=0; j<disks_b.size(); j++)
-        {
-            if(i == j && same_class) continue;
-            const Disk & pj = disks_b[j];
-            float d = disk_distance(pi, pj, rmax);
-            for(unsigned long k=0; k<radii.size(); k++)
-            {
-                float r = disk_distance(pi, {pi.x+radii[k]*rmax, pi.y, pj.r}, rmax);
-                float inner = std::max(r-0.5f, 0.f);//disk_distance(pi, {pi.x+(std::max(radii[k]-0.5f, 0.f)*rmax), pi.y, pj.r}, rmax);
-                float outer = (r+0.5); //disk_distance(pi, {pi.x+(radii[k]+0.5f)*rmax, pi.y, pj.r}, rmax);
-                if(perimeter[i][k] > 0)
-                {
-                    float a = area[k];
-                    //a = M_PI*(outer*outer - inner*inner)/2;
-                    float contrib = gaussian_kernel(sigma, r-d);
-                    current_PCF[k]+=contrib/(a*perimeter[i][k]);
-                }
-            }
-        }
-        for(unsigned long k=0; k<radii.size(); k++)
-        {
-            current_PCF[k]/=disks_b.size();
-            meanPCF[k]+=current_PCF[k];
-            if(current_PCF[k] > maxPCF[k])
-            {
-                maxPCF[k]=current_PCF[k];
-            }
-            if(current_PCF[k] < minPCF[k])
-            {
-                minPCF[k]=current_PCF[k];
-            }
-        }
-    }
-
-    for(float & pcf : meanPCF)
-    {
-        pcf/=disks_a.size();
-    }
-}
-
-void ClassInteraction::discardPCFs(){
-    meanPCF.clear();
-    maxPCF.clear();
-    minPCF.clear();
-    radii.clear();
-}
-
-void ASMCDD::computePCF(){
-    /*unsigned long n=0;
-    for(auto & di : disks)
-    {
-        n+=di.size();
-    }*/
-    for(auto & interaction : interaction_graph)
-    {
-        bool same_class = interaction.class_a == interaction.class_b;
-        unsigned long n = same_class ? disks[interaction.class_a].size() : disks[interaction.class_a].size()+disks[interaction.class_b].size();
-        float rmax = 2.0*std::sqrt(1/(2*std::sqrt(3)*n));
-        interaction.computePCF(disks[interaction.class_a], disks[interaction.class_b], rmax, 0.1, 0.25, 5*rmax, same_class);
-    }
-}
-
-std::vector<ClassInteraction> &ASMCDD::getSavedInteractions(){
-    return interaction_saved;
-}
-
-std::vector<std::vector<Disk>> &ASMCDD::getSavedDisks(){
-    return disks_saved;
-}
-
-void ASMCDD::setTargetPCFs(unsigned long nClasses, std::vector<ClassInteraction> const & _target){
-    disks.clear();
-    disks_saved.clear();
-    interaction_graph.clear();
-    interaction_saved.clear();
-
-    disks.resize(nClasses);
-    interaction_graph = _target;
-    std::for_each(interaction_graph.begin(), interaction_graph.end(), [](ClassInteraction & i){i.discardPCFs();});
-
-    target_graph = _target;
-}
-
-float computeError(ClassInteraction const & current, ClassInteraction const & target)
-{
-    float error=0;
-    for(unsigned long i=0; i<current.meanPCF.size() && i<target.meanPCF.size(); i++)
-    {
-        error = std::max(error, current.meanPCF[i] - target.meanPCF[i]);
-    }
-    return error;
-}
-
-float computeError(std::vector<Target_pcf_type> const & current, std::vector<Target_pcf_type> const & target)
-{
-    float error=0;
-    for(unsigned long i=0; i<current.size() && i<target.size(); i++)
-    {
-        error = std::max(error, (current[i].mean - target[i].mean)/target[i].mean);
-    }
-    return error;
-}
-
-float computeError(std::vector<float> const & current, std::vector<Target_pcf_type> const & target)
-{
-    float error=0;
-    for(unsigned long i=0; i<current.size() && i<target.size(); i++)
-    {
-        error = std::max(error, current[i] - target[i].mean);
-    }
-    return error;
-}
-
-/*float computeError(std::vector<double> const & current, std::vector<Target_pcf_type> const & target, unsigned long n)
-{
-    float error=0;
-    for(unsigned long i=0; i<current.size() && i<target.size(); i++)
-    {
-        error = std::max(error, float(current[i]/n - target[i].mean));
-    }
-    return error;
-}*/
 
 void Category::setTargetDisks(std::vector<Disk> const &target){
     target_disks = target;
@@ -424,8 +137,8 @@ std::vector<float> compute_density(Disk const & pi, std::vector<Disk> const & ot
         float d = diskDistance(pi, pj, rmax);
         for(unsigned long k=0; k<nSteps; k++)
         {
-            float r = radii[k]/rmax;//diskDistance(pi, {pi.x+radii[k], pi.y, pj.r}, rmax);
-            density[k]+=/*weights[k]**/gaussian_kernel(params.sigma, r-d)/*/areas[k]*/;
+            float r = radii[k]/rmax;
+            density[k]+=gaussian_kernel(params.sigma, r-d);
         }
     }
     for(unsigned long k=0; k<nSteps; k++)
@@ -506,57 +219,6 @@ Contribution compute_contribution(Disk const & pi, std::vector<Disk> const & oth
     return out;
 }
 
-std::vector<Target_pcf_type> computePCF(std::vector<Disk> const & current, std::vector<Disk> const & other, std::vector<std::vector<float>> const & disks_weight, std::vector<float> const & areas, float rmax, ASMCDD_params const & params)
-{
-    bool same_category = &current == &other;
-    auto nSteps = (unsigned long)(params.limit/params.step);
-    std::vector<Target_pcf_type> out;
-    out.resize(nSteps, {0,0,0});
-
-    for(unsigned long i=0; i<nSteps; i++)
-    {
-        out[i].radius = (i+1)*params.step;
-    }
-    std::vector<float> currentPCF;
-    currentPCF.resize(nSteps);
-    for(unsigned long i=0; i<current.size(); i++)
-    {
-        std::fill(currentPCF.begin(), currentPCF.end(), 0);
-        const Disk & pi = current[i];
-        for(unsigned long j=0; j<other.size(); j++)
-        {
-            if(i == j && same_category) continue;
-            const Disk & pj = other[j];
-            float d = diskDistance(pi, pj, rmax);
-            for(unsigned long k=0; k<out.size(); k++)
-            {
-                float r = out[k].radius;/*diskDistance(pi, {pi.x+out[k].radius*rmax, pi.y, pj.r}, rmax);*/
-                currentPCF[k]+=disks_weight[i][k]*gaussian_kernel(params.sigma, r-d)/areas[k];
-            }
-        }
-        for(unsigned long k=0; k<out.size(); k++)
-        {
-            currentPCF[k]/=other.size();
-            out[k].mean+=currentPCF[k];
-            if(currentPCF[k] > out[k].max)
-            {
-                out[k].max=currentPCF[k];
-            }
-            if(currentPCF[k] < out[k].min)
-            {
-                out[k].min=currentPCF[k];
-            }
-        }
-    }
-
-    for(auto & pcf : out)
-    {
-        pcf.mean/=current.size();
-    }
-
-    return out;
-}
-
 std::vector<Target_pcf_type> compute_pcf(std::vector<Disk> const & disks_a, std::vector<Disk> const & disks_b, std::vector<float> const & area, std::vector<float> const & radii, float rmax, ASMCDD_params const & params)
 {
     std::vector<Target_pcf_type> out;
@@ -603,7 +265,7 @@ void Category::computeTarget(){
     target_rmax.insert(std::make_pair(id, computeRmax(target_disks.size())));
     for(unsigned long parent : parents_id)
     {
-        target_rmax.insert(std::make_pair(parent, computeRmax(target_disks.size()+(*categories.get())[parent].target_disks.size())));
+        target_rmax.insert(std::make_pair(parent, computeRmax(target_disks.size()/*+(*categories.get())[parent].target_disks.size()*/)));
     }
     std::vector<float> area, radii;
     area.resize(nSteps);
@@ -627,11 +289,6 @@ void Category::computeTarget(){
 
         auto & parent_disks = (*categories.get())[parent].target_disks;
         target_pcf.insert(std::make_pair(parent, compute_pcf(target_disks, parent_disks, area, radii, rmax, *params.get())));
-        for(unsigned long k=0; k<nSteps; k++)
-        {
-            std::cout << target_pcf[parent][k].mean << ' ';
-        }
-        std::cout << std::endl;
     }
 }
 
@@ -669,7 +326,6 @@ void Category::initialize(float domainLength, float e_delta){
     std::random_device rand_device;
     std::mt19937_64 rand_gen(rand_device());
 
-
     disks.clear();
     pcf.clear();
 
@@ -688,11 +344,9 @@ void Category::initialize(float domainLength, float e_delta){
     {
         for(unsigned long long i=0; i<n_repeat; i++)
         {
-            //output_disks_radii.push_back(d.r*diskfact);
             output_disks_radii.push_back(d.r);
         }
     }
-    //std::uniform_real_distribution<float> randf(0, 1);
     std::uniform_real_distribution<float> randf(0, domainLength);
 
     std::shuffle(output_disks_radii.begin(), output_disks_radii.end(), rand_gen); //Shuffle array
@@ -700,6 +354,7 @@ void Category::initialize(float domainLength, float e_delta){
     // This combination effectively does a random non repeating sampling
 
     std::sort(output_disks_radii.rbegin(), output_disks_radii.rend()); //Sort the radii in descending order
+    finalSize = output_disks_radii.size();
 
     float e_0 = 0;
     unsigned long max_fails=1000;
@@ -714,17 +369,7 @@ void Category::initialize(float domainLength, float e_delta){
     auto & others = *categories.get();
     auto & parameters = *params.get();
 
-    constexpr unsigned long MAX_LONG = std::numeric_limits<unsigned long>::max();/*
-    std::vector<Target_pcf_type> curr_pcf;
-    curr_pcf.resize(nSteps, {0,0,0});
-    for(unsigned long i=0; i<nSteps; i++)
-    {
-        curr_pcf[i].radius = (i+1)*parameters.step;
-    }
-    for(auto && relation : relations)
-    {
-        pcf.insert(std::make_pair(relation, curr_pcf));
-    }*/
+    constexpr unsigned long MAX_LONG = std::numeric_limits<unsigned long>::max();
     std::map<unsigned long, std::vector<std::vector<float>>> weights;
     std::map<unsigned long, std::vector<float>> current_pcf;
     for(auto relation : relations){
@@ -762,7 +407,9 @@ void Category::initialize(float domainLength, float e_delta){
             fails++;
         }else
         {
+            disks_access.lock();
             disks.push_back(d_test);
+            disks_access.unlock();
             fails=0;
             for(auto relation : relations)
             {
@@ -778,59 +425,11 @@ void Category::initialize(float domainLength, float e_delta){
                 }
             }
             n_accepted++;
-            std::cout << "accepted " << n_accepted << " / " << output_disks_radii.size()<< std::endl;
         }
 
-        /*
-        disks.push_back(d_test);
-        for(auto relation : relations)
-        {
-            auto test_pcf = compute_pcf(disks, others[relation].disks, target_areas[relation], target_radii[relation], target_rmax[relation]*diskfact, parameters);
-            if(e < computeError(test_pcf, target_pcf[relation]))
-            {
-                rejected=true;
-                break;
-            }
-        }
-        if(rejected)
-        {
-            fails++;
-            disks.pop_back();
-        }else
-        {
-            //disks.push_back(d_test);
-            n_accepted++;
-            fails=0;
-            std::cout << "accepted " << n_accepted << " / " << output_disks_radii.size()<< std::endl;
-        }*/
-        /*auto current_pcf = computePCF(disks, disks, disks_weights, target_areas[id], target_rmax[id], *(params.get()));
-        if(e < computeError(current_pcf, target_pcf[id])){
-            rejected=true;
-        }else{
-            for(auto parent : parents_id)
-            {
-                current_pcf = computePCF(disks, [parent].disks, disks_weights, target_areas[id], target_rmax[id], *(params.get()));
-                if(e < computeError(current_pcf, target_pcf[parent]))
-                {
-                    rejected=true;
-                    break;
-                }
-            }
-        }
-        if(rejected)
-        {
-            disks.pop_back();
-            disks_weights.pop_back();
-            fails++;
-        }else
-        {
-            std::cout << "accepted " << n_accepted << " / " << output_disks_radii.size()<< std::endl;
-            n_accepted++;
-            fails=0;
-        }*/
         if(fails > max_fails)
         {
-            std::cout << "grid searching" <<std::endl;
+            std::cout << "Grid searching : " << id <<std::endl;
             //Grid search
             constexpr unsigned long N_I = 100;
             constexpr unsigned long N_J = 100;
@@ -852,46 +451,9 @@ void Category::initialize(float domainLength, float e_delta){
                             test_pcf = compute_contribution(cell_test, others[relation].disks, weights[relation], target_radii[relation], target_areas[relation], target_rmax[relation], parameters, relation == id ? n_accepted : MAX_LONG, relation == id ? output_disks_radii.size()*output_disks_radii.size() : output_disks_radii.size()*others[relation].disks.size(), diskfact);
                             currentError = std::max(currentError, compute_error(test_pcf, current_pcf[relation], target_pcf[relation]));
                             contribs[i][j].insert_or_assign(relation, test_pcf);
-                            unsigned long target_size =  others[relation].target_disks.size();
-                            //auto test_pcf = compute_pcf(disks, others[relation].disks, target_areas[relation], target_radii[relation], target_rmax[relation]*diskfact, parameters);
-                            /*for(unsigned long k=0; k<nSteps; k++)
-                            {
-                                test_pcf[k] = (test_pcf[k]/(n_accepted+1) + (pcf[relation][k].mean*n_accepted)/(n_accepted+1))/(n_accepted+1);
-                            }*/
-                            //currentError = std::max(currentError, computeError(test_pcf, target_pcf[relation]));
-
                         }
 
                         errors[i][j] = currentError;
-                        /*if(currentError < minError.val)
-                        {
-                            minError.val = currentError;
-                            minError.i = i;
-                            minError.j = j;
-                        }*/
-
-                        //disks.emplace_back(, 0.01*j, output_disks_radii[n_accepted]);
-                        /*disks_weights.emplace_back();
-                        for(unsigned long k=0; k<nSteps; k++)
-                        {
-                            float perimeter = perimeter_weight(disks.back().x, disks.back().y, (k+1)*target_rmax[id]);
-                            disks_weights.back().push_back(perimeter <= 0 ? 0.0f : 1.f/perimeter);
-                        }
-                        current_pcf = computePCF(disks, disks, disks_weights, target_areas[id], target_rmax[id], *(params.get()));
-                        currentError = computeError(current_pcf, target_pcf[id]);
-                        for(auto parent : parents_id)
-                        {
-                            current_pcf = computePCF(disks, (*categories.get())[parent].disks, disks_weights, target_areas[id], target_rmax[id], *(params.get()));
-                            currentError = std::max(currentError, computeError(current_pcf, target_pcf[parent]));
-                        }
-                        disks.pop_back();
-                        disks_weights.pop_back();
-                        if(currentError < minError)
-                        {
-                            minError = currentError;
-                            min_i=i;
-                            min_j=j;
-                        }*/
                     }
                 }
 
@@ -908,8 +470,9 @@ void Category::initialize(float domainLength, float e_delta){
                     }
                 }
 
-                std::cout << std::scientific << minError.val << std::defaultfloat << std::endl;
-                disks.emplace_back(0.01*minError.i, 0.01*minError.j, output_disks_radii[n_accepted]);
+                disks_access.lock();
+                disks.emplace_back((domainLength/N_I)*minError.i + (randf(rand_gen)-domainLength/2)/(N_I*10), (domainLength/N_J)*minError.j + (randf(rand_gen)-domainLength/2)/(N_J*10), output_disks_radii[n_accepted]);
+                disks_access.unlock();
                 for(auto relation : relations)
                 {
                     auto & current = current_pcf[relation];
@@ -924,7 +487,6 @@ void Category::initialize(float domainLength, float e_delta){
                     }
                 }
                 n_accepted++;
-                std::cout << "grid search accepted " << n_accepted << " / " << output_disks_radii.size() << std::endl;
             }
 
         }
@@ -937,18 +499,10 @@ void Category::initialize(float domainLength, float e_delta){
         {
             cpcf[k].mean = current_pcf[r][k];
             cpcf[k].radius = (k+1)*parameters.step;
-            std::cout << target_radii[r][k] << ' ';
         }
-        std::cout << std::endl;
-        pcf.insert_or_assign(r, cpcf);
-        //pcf.insert_or_assign(r, compute_pcf(disks, others[r].disks, target_areas[r], target_radii[r], target_rmax[r], parameters));
+        //pcf.insert_or_assign(r, cpcf);
+        pcf.insert_or_assign(r, compute_pcf(disks, others[r].disks, target_areas[r], target_radii[r], target_rmax[r], parameters));
     }
-    /*pcf.insert_or_assign(id, computePCF(disks, disks, disks_weights, target_areas[id], target_rmax[id], *(params.get())));
-    for(auto parent : parents_id)
-    {
-        pcf.insert_or_assign(parent, computePCF(disks, (*categories.get())[parent].disks, disks_weights, target_areas[id], target_rmax[id], *(params.get())));
-    }*/
-    //std::cout << "id : " << id << " nb_disks " << disks.size();
     initialized=true;
 
 }
@@ -979,7 +533,10 @@ std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::
 }
 
 std::vector<Disk> Category::getCurrentDisks(){
-    return disks;
+    disks_access.lock();
+    std::vector<Disk> outDisks(disks);
+    disks_access.unlock();
+    return outDisks;
 }
 
 void Category::addTargetDisk(Disk const &d){
@@ -1007,56 +564,56 @@ std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::
     return result;
 }
 
-unsigned long ASMCDD_new::addTargetClass(std::vector<Disk> const &target){
+unsigned long ASMCDD::addTargetClass(std::vector<Disk> const &target){
     categories->emplace_back(categories->size(), categories, params);
     categories->back().setTargetDisks(target);
     return categories->size()-1;
 }
 
-Category &ASMCDD_new::getClass(unsigned long id){
+Category &ASMCDD::getClass(unsigned long id){
     return categories->at(id);
 }
 
-void ASMCDD_new::setParams(ASMCDD_params const &_params){
+void ASMCDD::setParams(ASMCDD_params const &_params){
     (*params.get()) = _params;
 }
 
-void ASMCDD_new::addDependency(unsigned long parent, unsigned long child){
+void ASMCDD::addDependency(unsigned long parent, unsigned long child){
     categories->at(parent).addChild(child);
     categories->at(child).addDependency(parent);
 }
 
-void ASMCDD_new::computeTarget(){
+void ASMCDD::computeTarget(){
     for(auto & category : (*categories.get()))
     {
         category.computeTarget();
     }
 }
 
-std::vector<Target_pcf_type> ASMCDD_new::getTargetPCF(unsigned long parent, unsigned long child){
+std::vector<Target_pcf_type> ASMCDD::getTargetPCF(unsigned long parent, unsigned long child){
     return categories->at(child).getTargetPCF(parent);
 }
 
-std::vector<Target_pcf_type> ASMCDD_new::getCurrentPCF(unsigned long parent, unsigned long child){
+std::vector<Target_pcf_type> ASMCDD::getCurrentPCF(unsigned long parent, unsigned long child){
     return categories->at(child).getCurrentPCF(parent);
 }
 
-std::vector<Target_pcf_type> ASMCDD_new::getTargetPCF(unsigned long self){
+std::vector<Target_pcf_type> ASMCDD::getTargetPCF(unsigned long self){
     return getTargetPCF(self, self);
 }
 
-std::vector<Target_pcf_type> ASMCDD_new::getCurrentPCF(unsigned long self){
+std::vector<Target_pcf_type> ASMCDD::getCurrentPCF(unsigned long self){
     return getCurrentPCF(self, self);
 }
 
-void ASMCDD_new::initialize(float domainLength, float e_delta){
+void ASMCDD::initialize(float domainLength, float e_delta){
     for(auto & category : (*categories.get()))
     {
         category.initialize(domainLength, e_delta);
     }
 }
 
-std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>> ASMCDD_new::getCurrentPCFplot(){
+std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>> ASMCDD::getCurrentPCFplot(){
     std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>> result;
     for(auto & category : (*categories.get()))
     {
@@ -1067,11 +624,11 @@ std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::
     return result;
 }
 
-std::vector<Disk> ASMCDD_new::getCurrentDisks(unsigned long id){
+std::vector<Disk> ASMCDD::getCurrentDisks(unsigned long id){
     return categories->at(id).getCurrentDisks();
 }
 
-ASMCDD_new::ASMCDD_new(std::string const &filename) : ASMCDD_new::ASMCDD_new(){
+void ASMCDD::loadFile(std::string const & filename){
     int buffer;
     std::ifstream file;
     file.open(filename);
@@ -1084,6 +641,7 @@ ASMCDD_new::ASMCDD_new(std::string const &filename) : ASMCDD_new::ASMCDD_new(){
     unsigned int n_classes = buffer;
     std::map<unsigned int, unsigned int> id_map;
     auto cats = categories.get();
+    cats->clear();
     for(unsigned int i=0; i<n_classes; i++)
     {
         file >> buffer;
@@ -1103,11 +661,15 @@ ASMCDD_new::ASMCDD_new(std::string const &filename) : ASMCDD_new::ASMCDD_new(){
     file.close();
 }
 
-std::vector<Disk> ASMCDD_new::getTargetDisks(unsigned long id){
+ASMCDD::ASMCDD(std::string const &filename) : ASMCDD::ASMCDD(){
+    loadFile(filename);
+}
+
+std::vector<Disk> ASMCDD::getTargetDisks(unsigned long id){
     return categories->at(id).getTargetDisks();
 }
 
-std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>> ASMCDD_new::getTargetPCFplot(){
+std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>> ASMCDD::getTargetPCFplot(){
     std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>> result;
     for(auto & category : (*categories.get()))
     {
@@ -1128,9 +690,224 @@ void Category::normalize(float domainLength)
     }
 }
 
-void ASMCDD_new::normalize(float domainLength){
+void Category::refine(unsigned long max_iter, float threshold, bool isDistanceThreshold){
+    //TODO
+    std::vector<unsigned long> relations;
+    relations.push_back(id);
+    relations.insert(relations.end(), parents_id.begin(), parents_id.end());
+
+}
+
+void ASMCDD::normalize(float domainLength){
     for(auto & c : *categories.get())
     {
         c.normalize(domainLength);
     }
+}
+
+std::vector<float> compute_pretty_pcf(std::vector<Disk> const & disks_a, std::vector<Disk> const & disks_b, std::vector<float> const & radii, std::vector<float> const & area, float rmax, ASMCDD_params const & params, float diskfactor)
+{
+    std::vector<float> pcf, density;
+    pcf.resize(radii.size(), 0);
+    density.resize(radii.size());
+    for(auto const & pi : disks_a)
+    {
+        auto weight = get_weight(pi, radii, diskfactor);
+        std::fill(density.begin(), density.end(), 0);
+        for(unsigned long k=0; k<radii.size(); k++)
+        {
+            for(auto const & pj : disks_b)
+            {
+                if(&pi != &pj)
+                {
+                    density[k]+=gaussian_kernel(params.sigma, (radii[k]-euclidian(pi, pj))/rmax);
+                }
+            }
+            pcf[k]+=density[k]*(weight[k] > 4 ? 4 : weight[k])/disks_a.size();
+        }
+    }
+    for(unsigned long k=0; k<pcf.size(); k++)
+    {
+        pcf[k]/=area[k]*disks_b.size();
+    }
+    return pcf;
+}
+
+std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> ASMCDD::getPrettyPCFplot(float domainLength){
+    std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> plots;
+    float diskfactor = 1/domainLength;
+    //Get all the disks and info
+    std::vector<Compute_status> compute_stats;
+    for(auto & c : *categories.get())
+    {
+        compute_stats.push_back(c.getComputeStatus());
+    }
+    //Get the pretty pcfs from them
+
+    //Compute common weight terms
+    auto nSteps = (unsigned long)(params->limit/params->step);
+    std::vector<std::vector<float>> radii;
+    std::vector<std::vector<float>> area;
+    radii.resize(compute_stats.size());
+    area.resize(compute_stats.size());
+    float totalRmax;
+    std::vector<float> totalRadii;
+    std::vector<float> totalArea;
+    unsigned long nbPoints=0;
+    for(unsigned long c=0; c<compute_stats.size(); c++)
+    {
+        nbPoints+=compute_stats[c].disks.size();
+        float rmax = compute_stats[c].rmax;
+        radii[c].resize(nSteps);
+        area[c].resize(nSteps);
+        for(unsigned long k=0; k<nSteps; k++)
+        {
+            radii[c][k] = (k+1)*params->step*rmax;
+            float inner = std::max(0.f, radii[c][k]-0.5f*rmax);
+            float outer = radii[c][k]+0.5f*rmax;
+            area[c][k] = M_PI*(outer*outer - inner*inner);
+        }
+    }
+
+    totalRmax = computeRmax(nbPoints);
+    totalRadii.resize(nSteps);
+    totalArea.resize(nSteps);
+    for(unsigned long k=0; k<nSteps; k++)
+    {
+        totalRadii[k] = (k+1)*params->step*totalRmax;
+        float inner = std::max(0.f, totalRadii[k]-0.5f*totalRmax);
+        float outer = totalRadii[k]+0.5f*totalRmax;
+        totalArea[k] = M_PI*(outer*outer - inner*inner);
+    }
+
+    for(unsigned long c=0; c<compute_stats.size(); c++)
+    {
+        auto & stat = compute_stats[c];
+        plots.first.push_back(stat.disks);
+        std::vector<float> pcf = compute_pretty_pcf(stat.disks, stat.disks, radii[c], area[c], stat.rmax, *params.get(), diskfactor);
+        std::vector<std::pair<float, float>> plot;
+        plot.resize(pcf.size());
+        for(unsigned long k=0; k<radii[c].size(); k++)
+        {
+            plot[k].first = radii[c][k]/stat.rmax;
+            plot[k].second = pcf[k];
+        }
+        plots.second.emplace_back(std::make_pair(c, c), plot);
+        for(unsigned long other : stat.parents)
+        {
+            pcf = compute_pretty_pcf(stat.disks, compute_stats[other].disks, totalRadii, totalArea, totalRmax, *params.get(), diskfactor);
+            for(unsigned long k=0; k<radii[c].size(); k++)
+            {
+                plot[k].second = pcf[k];
+            }
+            plots.second.emplace_back(std::make_pair(other, c), plot);
+        }
+    }
+
+    return plots;
+}
+
+std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> ASMCDD::getPrettyTargetPCFplot(float domainLength){
+    std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> plots;
+    float diskfactor = 1/domainLength;
+    //Get all the disks and info
+    std::vector<Compute_status> compute_stats;
+    for(auto & c : *categories.get())
+    {
+        compute_stats.push_back(c.getTargetComputeStatus());
+    }
+    //Get the pretty pcfs from them
+
+    //Compute common weight terms
+    auto nSteps = (unsigned long)(params->limit/params->step);
+    std::vector<std::vector<float>> radii;
+    std::vector<std::vector<float>> area;
+    radii.resize(compute_stats.size());
+    area.resize(compute_stats.size());
+    float totalRmax;
+    std::vector<float> totalRadii;
+    std::vector<float> totalArea;
+    unsigned long nbPoints=0;
+    for(unsigned long c=0; c<compute_stats.size(); c++)
+    {
+        nbPoints+=compute_stats[c].disks.size();
+        float rmax = compute_stats[c].rmax;
+        radii[c].resize(nSteps);
+        area[c].resize(nSteps);
+        for(unsigned long k=0; k<nSteps; k++)
+        {
+            radii[c][k] = (k+1)*params->step*rmax;
+            float inner = std::max(0.f, radii[c][k]-0.5f*rmax);
+            float outer = radii[c][k]+0.5f*rmax;
+            area[c][k] = M_PI*(outer*outer - inner*inner);
+        }
+    }
+
+    totalRmax = computeRmax(nbPoints);
+    totalRadii.resize(nSteps);
+    totalArea.resize(nSteps);
+    for(unsigned long k=0; k<nSteps; k++)
+    {
+        totalRadii[k] = (k+1)*params->step*totalRmax;
+        float inner = std::max(0.f, totalRadii[k]-0.5f*totalRmax);
+        float outer = totalRadii[k]+0.5f*totalRmax;
+        totalArea[k] = M_PI*(outer*outer - inner*inner);
+    }
+
+    for(unsigned long c=0; c<compute_stats.size(); c++)
+    {
+        auto & stat = compute_stats[c];
+        plots.first.push_back(stat.disks);
+        std::vector<float> pcf = compute_pretty_pcf(stat.disks, stat.disks, radii[c], area[c], stat.rmax, *params.get(), diskfactor);
+        std::vector<std::pair<float, float>> plot;
+        plot.resize(pcf.size());
+        for(unsigned long k=0; k<radii[c].size(); k++)
+        {
+            plot[k].first = radii[c][k]/stat.rmax;
+            plot[k].second = pcf[k];
+        }
+        plots.second.emplace_back(std::make_pair(c, c), plot);
+        for(unsigned long other : stat.parents)
+        {
+            pcf = compute_pretty_pcf(stat.disks, compute_stats[other].disks, totalRadii, totalArea, totalRmax, *params.get(), diskfactor);
+            for(unsigned long k=0; k<radii[c].size(); k++)
+            {
+                plot[k].second = pcf[k];
+            }
+            plots.second.emplace_back(std::make_pair(other, c), plot);
+        }
+    }
+
+    return plots;
+}
+
+Compute_status Category::getComputeStatus()
+{
+    Compute_status status;
+    status.rmax = target_rmax[id];
+    status.disks = getCurrentDisks();
+    status.parents = parents_id;
+    return status;
+}
+
+Compute_status Category::getTargetComputeStatus()
+{
+    Compute_status status;
+    status.rmax = target_rmax[id];
+    status.disks = getTargetDisks();
+    status.parents = parents_id;
+    return status;
+}
+
+unsigned long Category::getFinalSize(float domainLength){
+    return target_disks.size()*domainLength*domainLength;
+}
+
+std::vector<unsigned long> ASMCDD::getFinalSizes(float domainLength){
+    std::vector<unsigned long> sizes;
+    for(auto & c : *categories.get())
+    {
+        sizes.push_back(c.getFinalSize(domainLength));
+    }
+    return sizes;
 }

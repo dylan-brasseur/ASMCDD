@@ -18,31 +18,29 @@ LinePlot::LinePlot(const std::string &xaxis_name, const std::string &yaxis_name)
     y_axis_name = yaxis_name;
 }
 
-void LinePlot::clearDataPoints(std::string const &name){
-    auto entry = std::find(plots.begin(), plots.end(), name);
-    if(entry != plots.end())
-    {
-        currentSize-=entry->dataPoints.size();
-        entry->dataPoints.clear();
-    }
+void LinePlot::clearDataPoints(unsigned int plot_id){
+    currentSize -= plots.at(plot_id).dataPoints.size();
+    plots[plot_id].dataPoints.clear();
+    pointsChanged=true;
 }
 
 void LinePlot::clear(){
     plots.clear();
 }
 
-unsigned int LinePlot::addPlot(const std::string &name){
+unsigned int LinePlot::addPlot(const std::string &name, unsigned long category_a, unsigned long category_b){
     Plot plot;
     plot.name = name;
     plot.color[0]=plot.color[1]=plot.color[2]=0;
     plots.push_back(plot);
+    indexFromRelation.insert(std::make_pair(std::make_pair(category_a, category_b), plots.size()-1));
     return plots.size()-1;
 }
 
 unsigned int LinePlot::addDataPoint(unsigned int plot_id, std::pair<float, float> const &point){
     plots.at(plot_id).dataPoints.push_back(point);
-    pointsChanged=true;
     currentSize++;
+    pointsChanged=true;
     return plots[plot_id].dataPoints.size()-1;
 }
 
@@ -152,6 +150,15 @@ void LinePlot::modifyPoints(unsigned int plot, unsigned int start_index, std::ve
     pointsChanged = true;
 }
 
+void LinePlot::replacePoints(unsigned int plot_id, std::vector<std::pair<float, float>> const &point){
+    auto & plot = plots.at(plot_id);
+    currentSize = currentSize - plot.dataPoints.size() + point.size();
+    plot.dataPoints.resize(point.size());
+    std::copy(point.begin(), point.end(), plot.dataPoints.begin());
+    pointsChanged=true;
+}
+
+
 void LinePlot::setBounds(float min_x, float min_y, float max_x, float max_y){
     bounds[0] = min_x;
     bounds[1] = min_y;
@@ -162,4 +169,8 @@ void LinePlot::setBounds(float min_x, float min_y, float max_x, float max_y){
 std::shared_ptr<LinePlot> LinePlot::createLinePlot(){
     lineplot_list.push_back(std::make_shared<LinePlot>());
     return lineplot_list.back();
+}
+
+unsigned long LinePlot::getIdFromRelation(std::pair<unsigned long, unsigned long> relation){
+    return indexFromRelation.at(relation);
 }

@@ -35,6 +35,7 @@ public:
     void draw(GLint instanceVBO_location);
     void drawAsDisks(GLint offset_scale_rot_location, GLint color_uniform_location);
     void setColor(float r, float g, float b);
+    unsigned long getCount();
 };
 
 class Scene {
@@ -50,8 +51,10 @@ public:
     unsigned int addMesh(std::shared_ptr<Mesh> const & m);
     MeshInstances & getMesh(unsigned int i);
     void addMeshInstance(unsigned int index, InstanceCoordinates);
+    void moveOrAddInstances(unsigned int index, std::vector<Disk> const & disks);
     void draw();
     void drawAsDisks(GLint offset_scale_rot_location, GLint color_location, GLint bounds_location);
+    unsigned long getInstanceCount(unsigned int index);
 
     void setBounds(float min_x, float min_y, float max_x, float max_y);
     Camera &getCamera();

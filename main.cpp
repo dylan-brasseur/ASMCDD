@@ -7,11 +7,32 @@
 #include <chrono>
 #include <algorithm>
 #include <thread>
+#include <future>
 #include "include/Shader.h"
 #include "include/Program.h"
 #include "include/Scene.h"
 #include "include/LinePlot.h"
 #include "include/ASMCDD.h"
+
+std::mutex draw_lock;
+
+std::string WINDOW_TITLE = "Accurate Synthesis of Multi-Class Disk Distributions - ";
+std::string TARGET_STRING = "Computing target...";
+std::string INIT_STRING = "Initializing : ";
+std::string TOTAL_SIZE;
+std::string CURRENT_SIZE;
+std::string REFINE_STRING = "Refining...";
+std::string ALGO_DONE = "Done in ";
+
+unsigned long duration;
+
+bool targetDone = false, initDone = false, refineDone= false;
+bool initDisplayed = false;
+ASMCDD algo;
+float domainLength = 1;
+std::vector<unsigned long> currentSizes;
+std::vector<unsigned long> finalSizes;
+unsigned long totalSize;
 
 struct WindowHolder{
     std::shared_ptr<Program> program;
@@ -45,34 +66,91 @@ void display_3D() {
     windows[VIEW3D].scene->draw();
 }
 
+float rand_angle()
+{
+    static std::random_device rand_device;
+    static std::mt19937_64 rand_gen(rand_device());
+    static std::uniform_real_distribution<float> uni(0,  2*M_PI);
+    return uni(rand_gen);
+}
+
+void addNewInstances(std::vector<Disk> const & allDisks, unsigned long index, std::shared_ptr<Scene> const & scene, float domainLength)
+{
+    for(unsigned long count = scene->getInstanceCount(index);count<allDisks.size(); count++)
+    {
+        Disk const & d = allDisks[count];
+        scene->addMeshInstance(index, {d.x/domainLength, d.y/domainLength, d.r/domainLength, rand_angle()});
+    }
+}
+
+/**
+ * Updates the disks and plots;
+ */
+
+void update(){
+    unsigned long current_size=0;
+    bool localinit = initDone;
+    if(!localinit || !initDisplayed)
+    {
+        auto plots = algo.getPrettyPCFplot(domainLength);
+        for(auto const & p : plots.second)
+        {
+            if(currentSizes[p.first.first] == finalSizes[p.first.first] && currentSizes[p.first.second] == finalSizes[p.first.second]) continue;
+            draw_lock.lock();
+            windows[PCF_CURRENT].plot->replacePoints(windows[PCF_CURRENT].plot->getIdFromRelation(p.first), p.second);
+            draw_lock.unlock();
+        }
+        for(unsigned long id=0; id<plots.first.size(); id++)
+        {
+            current_size+=plots.first[id].size();
+            if(currentSizes[id] == finalSizes[id]) continue;
+            draw_lock.lock();
+            addNewInstances(plots.first[id], id, windows[DISKS_CURRENT].scene, domainLength);
+            currentSizes[id] = plots.first[id].size();
+            draw_lock.unlock();
+        }
+        if(localinit)
+        {
+            initDisplayed=true;
+        }
+        CURRENT_SIZE=std::to_string(current_size);
+    }
+}
+
 void anim(){
     static float anim=0;
     anim+=0.05;
     lightpos[0] = 10*std::cos(anim);
     lightpos[1] = 0;
     lightpos[2] = 10*std::sin(anim);
-    //windows[VIEW3D].scene->getMesh(0).modifyInstance(1, {2*std::sin(0.3f*anim), 2*std::cos(0.3f*anim), 0.1f+0.02f*std::sin(anim), 0.7f*anim});
     glutPostRedisplay();
 }
 std::chrono::time_point start = std::chrono::high_resolution_clock::now();
 unsigned long long int nbOfFrames=0; unsigned long long int nbOfMs=0;
 void timer(int value){
-    auto end = std::chrono::high_resolution_clock::now();
-    anim();
-    auto duration = end-start;
-    std::chrono::microseconds ms = std::chrono::duration_cast<std::chrono::microseconds>(duration);
-    nbOfFrames++;
-    nbOfMs+=ms.count()/1000;
-    if(nbOfMs >= 1000)
+    if(nbOfFrames % 10 == 0)
     {
-        static char window_title[128];
-        std::sprintf(window_title,"Accurate Synthesis of Multi-Class Disk Distributions - FPS : %.1f", float(nbOfFrames*1000)/float(nbOfMs));
-        glutSetWindowTitle(window_title);
-        nbOfFrames=0;
-        nbOfMs=0;
+        update();
+        std::string status;
+        if(!targetDone)
+        {
+            status=TARGET_STRING;
+        }else if(!initDone)
+        {
+            status=INIT_STRING + CURRENT_SIZE + "/" + TOTAL_SIZE;
+        }else if(!refineDone)
+        {
+            status=REFINE_STRING;
+        }else{
+            char seconds [64];
+            std::sprintf(seconds, "%.2lf", double(duration)/1000.0);
+            status=ALGO_DONE + seconds + "s";
+        }
+        glutSetWindowTitle((WINDOW_TITLE+status).c_str());
     }
-    start = end;
-    glutTimerFunc(17, timer, 0);
+
+    anim();
+    glutTimerFunc(1, timer, 0);
 }
 void display_disks(WindowIndex id){
     windows[id].program->use();
@@ -122,13 +200,14 @@ void display_window()
     glClearColor(0.0,0.0,0.0, 1.0);TEST_OPENGL_ERROR();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);TEST_OPENGL_ERROR();
     display_3D();
-    display_pcf(PCF_CURRENT);
+    draw_lock.lock();
     display_pcf(PCF_ORIGINAL);
     display_disks(DISKS_ORIGINAL);
+    display_pcf(PCF_CURRENT);
     display_disks(DISKS_CURRENT);
-
     glViewport(0, 0, window_width, window_height);
     glutSwapBuffers();
+    draw_lock.unlock();
 }
 
 void reshape_window(int width, int height)
@@ -159,7 +238,10 @@ void init_glut(int &argc, char *argv[]) {
     glutSetOption(GLUT_RENDERING_CONTEXT ,GLUT_USE_CURRENT_CONTEXT);
     glutInitContextVersion(4,5);
     glutInitContextProfile(GLUT_CORE_PROFILE);
+}
 
+void init_windows()
+{
     glutInitDisplayMode(GLUT_RGBA|GLUT_DOUBLE|GLUT_DEPTH);
     glutInitWindowSize(1280, 640);
     glutCreateWindow("Accurate Synthesis of Multi-Class Disk Distributions");
@@ -233,9 +315,10 @@ bool init_shaders() {
 int main(int argc, char *argv[]) {
     srand(time(nullptr));
     init_glut(argc, argv);
+    init_windows();
     init_GL();
     if (!init_glew())
-        std::exit(-1);
+        std::exit(EXIT_FAILURE);
     if(!init_shaders())
         return EXIT_FAILURE;
     if(!windows[VIEW3D].program->addAttribLocations("position", "normal", "color", "offset_scale_rot") || !windows[VIEW3D].program->addUniformLocations("MVP")){
@@ -275,66 +358,33 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     windows[DISKS_CURRENT].scene = windows[VIEW3D].scene;
-    windows[DISKS_ORIGINAL].program = windows[DISKS_CURRENT].program;
     windows[DISKS_ORIGINAL].scene = Scene::createScene(0,0);
-
-
-    ASMCDD orig("examples/forest_small.txt");
-
-    orig.save();
-    auto & disks = orig.getSavedDisks();
-    unsigned int grassInstances =  windows[DISKS_ORIGINAL].scene->addMesh(grass);
-    unsigned int treeInstances =  windows[DISKS_ORIGINAL].scene->addMesh(tree);
-    unsigned int champisInstances =  windows[DISKS_ORIGINAL].scene->addMesh(mushroom);
-    windows[DISKS_ORIGINAL].scene->getMesh(treeInstances).setColor(0.7, 0.4, 0);
-    std::for_each(disks[0].begin(), disks[0].end(), [&](Disk & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(treeInstances, {ic.x, ic.y, ic.r, 0});});
-    windows[DISKS_ORIGINAL].scene->getMesh(grassInstances).setColor(0, 1.0, 0);
-    std::for_each(disks[1].begin(), disks[1].end(), [&](Disk & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(grassInstances,{ic.x, ic.y, ic.r, 0});});
-    windows[DISKS_ORIGINAL].scene->getMesh(champisInstances).setColor(1.0, 0, 0);
-    std::for_each(disks[2].begin(), disks[2].end(), [&](Disk & ic){windows[DISKS_ORIGINAL].scene->addMeshInstance(champisInstances,{ic.x, ic.y, ic.r, 0});});
-    windows[DISKS_ORIGINAL].scene->setBounds(0,0 , 1, 1);
-    glLineWidth(2);
-    glEnable(GL_LINE_SMOOTH);
-    const unsigned char* renderer = glGetString(GL_RENDERER);
-
-    orig.addClassDependency(0,0);
-    orig.addClassDependency(0,1);
-    orig.addClassDependency(0,2);
-    orig.addClassDependency(1,1);
-    orig.addClassDependency(2,2);
-    orig.computePCF();
-    orig.save();
-    auto pcfs = orig.getSavedInteractions();
-
-    std::cout << "Running " << (argc > 0 ? argv[0] : "program") << " on " << renderer << std::endl;
-
+    windows[PCF_CURRENT].plot = LinePlot::createLinePlot();
+    windows[PCF_CURRENT].plot->setBounds(0,0,5, 2);
     windows[PCF_ORIGINAL].plot = LinePlot::createLinePlot();
-    char text[16] = "";
-    float3 colors[5] = {{0,0,1}, {1, 0.8, 0}, {0.5, 0.2, 0}, {0, 0.5, 0}, {1, 0, 0}};
-    for(unsigned long k = 0; k<pcfs.size(); k++)
-    {
-        std::sprintf(text, "%d", k);
-        unsigned int id = windows[PCF_ORIGINAL].plot->addPlot(text);
-        for(unsigned long i=0; i<pcfs[k].meanPCF.size(); i++)
-        {
-            float a = pcfs[k].meanPCF[i];
-            windows[PCF_ORIGINAL].plot->addDataPoint(id, std::make_pair(pcfs[k].radii[i], a));
-        }
-        windows[PCF_ORIGINAL].plot->setPlotColor(id, colors[k]);
-    }
-
     windows[PCF_ORIGINAL].plot->setBounds(0,0,5, 2);
 
+    glLineWidth(2);
+    glEnable(GL_LINE_SMOOTH);
 
-    ASMCDD_new current;
-    unsigned long tree_id = current.addTargetClass(disks[0]);
-    unsigned long grass_id = current.addTargetClass(disks[1]);
-    unsigned long mush_id = current.addTargetClass(disks[2]);
-    current.addDependency(tree_id, grass_id);
-    current.addDependency(tree_id, mush_id);
-    current.computeTarget();
-    current.initialize(1, 0.005);
-    auto plot = current.getCurrentPCFplot();
+    char text[16] = "";
+    float3 colors[5] = {{0,0,1}, {1, 0.8, 0}, {0.5, 0.2, 0}, {0, 0.5, 0}, {1, 0, 0}};
+
+    algo.loadFile("examples/forest_small.txt");
+    finalSizes = algo.getFinalSizes(domainLength);
+    currentSizes.resize(finalSizes.size(), 0);
+    totalSize = std::accumulate(finalSizes.begin(), finalSizes.end(), 0UL);
+    TOTAL_SIZE=std::to_string(totalSize);
+    ASMCDD_params params;
+    params.step=0.1;
+    params.limit=5;
+    params.sigma=0.25;
+    algo.setParams(params);
+    unsigned long tree_id = 0;
+    unsigned long grass_id = 1;
+    unsigned long mush_id = 2;
+    algo.addDependency(tree_id, grass_id);
+    algo.addDependency(tree_id, mush_id);
     std::map<std::pair<unsigned long, unsigned long>, float3> colormap;
     colormap.insert_or_assign(std::make_pair(tree_id, tree_id), colors[0]);
     colormap.insert_or_assign(std::make_pair(tree_id, grass_id), colors[1]);
@@ -342,34 +392,71 @@ int main(int argc, char *argv[]) {
     colormap.insert_or_assign(std::make_pair(grass_id, grass_id), colors[3]);
     colormap.insert_or_assign(std::make_pair(mush_id, mush_id), colors[4]);
 
+    windows[DISKS_ORIGINAL].scene->addMesh(tree);
+    windows[DISKS_ORIGINAL].scene->addMesh(grass);
+    windows[DISKS_ORIGINAL].scene->addMesh(mushroom);
 
-    windows[PCF_CURRENT].plot = LinePlot::createLinePlot();
-    for(auto const & p : plot)
+    windows[DISKS_ORIGINAL].scene->getMesh(tree_id).setColor(0.7, 0.4, 0);
+    windows[DISKS_ORIGINAL].scene->getMesh(grass_id).setColor(0, 1.0, 0);
+    windows[DISKS_ORIGINAL].scene->getMesh(mush_id).setColor(1.0, 0, 0);
+
+    windows[DISKS_CURRENT].scene->addMesh(tree);
+    windows[DISKS_CURRENT].scene->addMesh(grass);
+    windows[DISKS_CURRENT].scene->addMesh(mushroom);
+
+    windows[DISKS_CURRENT].scene->getMesh(tree_id).setColor(0.7, 0.4, 0);
+    windows[DISKS_CURRENT].scene->getMesh(grass_id).setColor(0, 1.0, 0);
+    windows[DISKS_CURRENT].scene->getMesh(mush_id).setColor(1.0, 0, 0);
+
+    windows[DISKS_ORIGINAL].scene->setBounds(0,0 , 1, 1);
+    windows[DISKS_CURRENT].scene->setBounds(0,0 , 1, 1);
+
+
+    for(auto & c : colormap)
     {
-        std::sprintf(text, "%lu %lu", p.first.first, p.first.second);
-        unsigned int id = windows[PCF_CURRENT].plot->addPlot(text);
-        windows[PCF_CURRENT].plot->addDataPoints(id, p.second);
-        windows[PCF_CURRENT].plot->setPlotColor(id, colormap.at(p.first));
+        std::sprintf(text, "%lu %lu", c.first.first, c.first.second);
+        unsigned int id = windows[PCF_CURRENT].plot->addPlot(text, c.first.first, c.first.second);
+        windows[PCF_CURRENT].plot->setPlotColor(id, c.second);
+        id = windows[PCF_ORIGINAL].plot->addPlot(text, c.first.first, c.first.second);
+        windows[PCF_ORIGINAL].plot->setPlotColor(id, c.second);
     }
 
-    windows[PCF_CURRENT].plot->setBounds(0,0,5, 2);
-
-    std::vector<Disk> currDisks;
-    unsigned int mi = windows[VIEW3D].scene->addMesh(mushroom);
-    windows[VIEW3D].scene->getMesh(mi).setColor(1.0, 0.0, 0.0);
-    currDisks = current.getCurrentDisks(mush_id);
-    std::for_each(currDisks.begin(), currDisks.end(), [&](Disk & ic){windows[VIEW3D].scene->addMeshInstance(mi, {ic.x, ic.y, ic.r, 0});});
-    mi = windows[VIEW3D].scene->addMesh(grass);
-    windows[VIEW3D].scene->getMesh(mi).setColor(0.0, 1.0, 0.0);
-    currDisks = current.getCurrentDisks(grass_id);
-    std::for_each(currDisks.begin(), currDisks.end(), [&](Disk & ic){windows[VIEW3D].scene->addMeshInstance(mi, {ic.x, ic.y, ic.r, 0});});
-    mi = windows[VIEW3D].scene->addMesh(tree);
-    windows[VIEW3D].scene->getMesh(mi).setColor(0.7f, 0.3f, 0.0f);
-    currDisks = current.getCurrentDisks(tree_id);
-    std::for_each(currDisks.begin(), currDisks.end(), [&](Disk & ic){windows[VIEW3D].scene->addMeshInstance(mi, {ic.x, ic.y, ic.r, 0});});
-
+    const unsigned char* renderer = glGetString(GL_RENDERER);
     start = std::chrono::high_resolution_clock::now();
-    glutTimerFunc(16, timer, 0);
+    glutTimerFunc(1, timer, 0);
     std::thread renderThread(glutMainLoop);
+    std::cout << "Running " << (argc > 0 ? argv[0] : "program") << " on " << renderer << std::endl;
+
+    algo.computeTarget();
+    draw_lock.lock();
+    targetDone = true;
+    draw_lock.unlock();
+    auto plots = algo.getPrettyTargetPCFplot(domainLength);
+
+    draw_lock.lock();
+    for(auto const & p : plots.second)
+    {
+        windows[PCF_ORIGINAL].plot->addDataPoints(windows[PCF_ORIGINAL].plot->getIdFromRelation(p.first), p.second);
+    }
+    addNewInstances(plots.first[tree_id], tree_id, windows[DISKS_ORIGINAL].scene, 1);
+    addNewInstances(plots.first[grass_id], grass_id, windows[DISKS_ORIGINAL].scene, 1);
+    addNewInstances(plots.first[mush_id], mush_id, windows[DISKS_ORIGINAL].scene, 1);
+    draw_lock.unlock();
+
+
+    algo.initialize(domainLength, 0.0001);
+    plots = algo.getPrettyPCFplot(domainLength);
+
+    draw_lock.lock();
+    initDone = true;
+    draw_lock.unlock();
+
+    draw_lock.lock();
+    //TODO refining
+    auto end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+    refineDone = true;
+    draw_lock.unlock();
+
     renderThread.join();
 }

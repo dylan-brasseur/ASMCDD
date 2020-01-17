@@ -29,6 +29,16 @@ void MeshInstances::modifyInstance(unsigned int index, InstanceCoordinates const
     instances[index] = instance;
     changed_indices.push_back(index);
 }
+
+unsigned long MeshInstances::getCount()
+{
+    return instances.size();
+}
+
+unsigned long Scene::getInstanceCount(unsigned int index)
+{
+    return mesh_instances[index].getCount();
+}
 void MeshInstances::draw(GLint instanceVBO_location){
     if(!instances.empty())
     {
@@ -142,4 +152,9 @@ void Scene::setBounds(float min_x, float min_y, float max_x, float max_y){
 
 void Scene::addMeshInstance(unsigned int index, InstanceCoordinates ic){
     mesh_instances.at(index).addInstance(ic);
+}
+
+void Scene::moveOrAddInstances(unsigned int index, std::vector<Disk> const & disks){
+    auto & minstance = mesh_instances.at(index);
+
 }
