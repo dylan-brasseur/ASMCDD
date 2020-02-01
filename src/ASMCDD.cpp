@@ -59,7 +59,7 @@ float perimeter_weight(double x, double y, double r)
 
 float perimeter_weight(float x, float y, float r, float diskfact)
 {
-    return perimeter_weight(x/diskfact, y/diskfact, r/diskfact);
+    return perimeter_weight(x*diskfact, y*diskfact, r*diskfact);
 }
 
 void Category::setTargetDisks(std::vector<Disk> const &target){
@@ -692,10 +692,6 @@ void Category::normalize(float domainLength)
 
 void Category::refine(unsigned long max_iter, float threshold, bool isDistanceThreshold){
     //TODO
-    std::vector<unsigned long> relations;
-    relations.push_back(id);
-    relations.insert(relations.end(), parents_id.begin(), parents_id.end());
-
 }
 
 void ASMCDD::normalize(float domainLength){
@@ -733,7 +729,7 @@ std::vector<float> compute_pretty_pcf(std::vector<Disk> const & disks_a, std::ve
     return pcf;
 }
 
-std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> ASMCDD::getPrettyPCFplot(float domainLength){
+std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> ASMCDD::getPrettyPCFplot(float domainLength, std::vector<unsigned long> const &currentSizes){
     std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> plots;
     float diskfactor = 1/domainLength;
     //Get all the disks and info
@@ -753,10 +749,8 @@ std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsign
     float totalRmax;
     std::vector<float> totalRadii;
     std::vector<float> totalArea;
-    unsigned long nbPoints=0;
     for(unsigned long c=0; c<compute_stats.size(); c++)
     {
-        nbPoints+=compute_stats[c].disks.size();
         float rmax = compute_stats[c].rmax;
         radii[c].resize(nSteps);
         area[c].resize(nSteps);
@@ -768,8 +762,8 @@ std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsign
             area[c][k] = M_PI*(outer*outer - inner*inner);
         }
     }
-
-    totalRmax = computeRmax(nbPoints);
+    auto finalSizes = getFinalSizes(1);
+    totalRmax = computeRmax(std::accumulate(finalSizes.begin(), finalSizes.end(), 0UL));
     totalRadii.resize(nSteps);
     totalArea.resize(nSteps);
     for(unsigned long k=0; k<nSteps; k++)
@@ -783,24 +777,31 @@ std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsign
     for(unsigned long c=0; c<compute_stats.size(); c++)
     {
         auto & stat = compute_stats[c];
-        plots.first.push_back(stat.disks);
-        std::vector<float> pcf = compute_pretty_pcf(stat.disks, stat.disks, radii[c], area[c], stat.rmax, *params.get(), diskfactor);
         std::vector<std::pair<float, float>> plot;
-        plot.resize(pcf.size());
-        for(unsigned long k=0; k<radii[c].size(); k++)
+        plots.first.push_back(stat.disks);
+        if(currentSizes[c] != stat.disks.size())
         {
-            plot[k].first = radii[c][k]/stat.rmax;
-            plot[k].second = pcf[k];
-        }
-        plots.second.emplace_back(std::make_pair(c, c), plot);
-        for(unsigned long other : stat.parents)
-        {
-            pcf = compute_pretty_pcf(stat.disks, compute_stats[other].disks, totalRadii, totalArea, totalRmax, *params.get(), diskfactor);
+            std::vector<float> pcf = compute_pretty_pcf(stat.disks, stat.disks, radii[c], area[c], stat.rmax, *params.get(), diskfactor);
+            plot.resize(pcf.size());
             for(unsigned long k=0; k<radii[c].size(); k++)
             {
-                plot[k].second = pcf[k];
+                plot[k].first = radii[c][k]/(stat.rmax);
+                plot[k].second = pcf[k]*domainLength*domainLength;
             }
-            plots.second.emplace_back(std::make_pair(other, c), plot);
+            plots.second.emplace_back(std::make_pair(c, c), plot);
+        }
+        for(unsigned long other : stat.parents)
+        {
+            if(currentSizes[c] != stat.disks.size() || currentSizes[other] != compute_stats[other].disks.size())
+            {
+                std::vector<float> pcf = compute_pretty_pcf(stat.disks, compute_stats[other].disks, totalRadii, totalArea, totalRmax, *params.get(), diskfactor);
+                plot.resize(pcf.size());
+                for(unsigned long k=0; k<radii[c].size(); k++)
+                {
+                    plot[k].second = pcf[k]*domainLength*domainLength;
+                }
+                plots.second.emplace_back(std::make_pair(other, c), plot);
+            }
         }
     }
 
@@ -910,4 +911,8 @@ std::vector<unsigned long> ASMCDD::getFinalSizes(float domainLength){
         sizes.push_back(c.getFinalSize(domainLength));
     }
     return sizes;
+}
+
+void ASMCDD::refine(unsigned long max_iter, float threshold, bool isDistanceThreshold){
+    //TODO
 }

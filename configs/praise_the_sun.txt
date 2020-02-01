@@ -1,0 +1,11 @@
+examples/toy_2.txt
+2
+models/praise_statue.ply
+0 200 0
+models/praise.ply
+200 0 0
+1
+0 1
+0 0 0 200 0
+1 1 200 0 0
+0 1 200 200 0

@@ -32,6 +32,12 @@ struct ASMCDD_params{
     float step = 0.1;
     float sigma = 0.25;
     float limit = 5;
+    float domainLength = 1;
+    unsigned long max_iter = 2000;
+    float threshold = 0.001;
+    float error_delta=0.0001;
+    bool distanceThreshold = true;
+    std::string example_filename;
 };
 
 class Category{
@@ -110,7 +116,7 @@ public:
     std::vector<Disk> getCurrentDisks(unsigned long id);
     std::vector<Disk> getTargetDisks(unsigned long id);
 
-    std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> getPrettyPCFplot(float domainLength);
+    std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> getPrettyPCFplot(float domainLength, std::vector<unsigned long> const & currentSizes);
     std::pair<std::vector<std::vector<Disk>>, std::vector<std::pair<std::pair<unsigned long, unsigned long>, std::vector<std::pair<float, float>>>>> getPrettyTargetPCFplot(float domainLength);
 
     std::vector<unsigned long> getFinalSizes(float domainLength);

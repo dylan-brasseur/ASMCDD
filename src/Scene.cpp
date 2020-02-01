@@ -47,7 +47,7 @@ void MeshInstances::draw(GLint instanceVBO_location){
 
         if(instancesAmountChanged){
             //Reallocate
-            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_DYNAMIC_DRAW);TEST_OPENGL_ERROR();
+            glBufferData(GL_ARRAY_BUFFER, instances.size()*sizeof(InstanceCoordinates),instances.data(), GL_STREAM_DRAW);TEST_OPENGL_ERROR();
             instancesAmountChanged=false;
             changed_indices.clear(); //We copied the whole buffer anyway
         }else if(!changed_indices.empty())
@@ -152,9 +152,4 @@ void Scene::setBounds(float min_x, float min_y, float max_x, float max_y){
 
 void Scene::addMeshInstance(unsigned int index, InstanceCoordinates ic){
     mesh_instances.at(index).addInstance(ic);
-}
-
-void Scene::moveOrAddInstances(unsigned int index, std::vector<Disk> const & disks){
-    auto & minstance = mesh_instances.at(index);
-
 }

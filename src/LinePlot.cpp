@@ -29,6 +29,10 @@ void LinePlot::clear(){
 }
 
 unsigned int LinePlot::addPlot(const std::string &name, unsigned long category_a, unsigned long category_b){
+    if(indexFromRelation.find(std::make_pair(category_a, category_b)) != indexFromRelation.end())
+    {
+        return indexFromRelation[std::make_pair(category_a, category_b)];
+    }
     Plot plot;
     plot.name = name;
     plot.color[0]=plot.color[1]=plot.color[2]=0;
