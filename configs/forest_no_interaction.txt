@@ -1,0 +1,12 @@
+examples/forest_small.txt
+3
+models/tree.ply
+178 102 0
+models/grass.ply
+0 255 0
+models/champi.ply
+255 0 0
+0
+0 0 0 0 255
+1 1 0 128 0
+2 2 255 0 0
