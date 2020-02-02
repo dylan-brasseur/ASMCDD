@@ -1,8 +1,8 @@
-#Accurate Synthesis of Multi Class Disks Distribution
+# Accurate Synthesis of Multi Class Disks Distribution
 Implementation of `P. Ecormier‐Nocca, P. Memari, J. Gain, et M. Cani, « Accurate Synthesis of Multi‐Class Disk Distributions », Computer Graphics Forum, vol. 38, nᵒ 2, p. 157‑168, may 2019` in C++ and OpenGL.
 
 
-##How to build ?
+## How to build ?
 This repository has only been tested on Linux and requires cmake 3.0+
 
 - Download the repository and switch to it
@@ -14,7 +14,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build .
  ```
 
-##How to run ?
+## How to run ?
 To run the program, go in the build directory and type
 ```
 ./DisksProject config_file
@@ -26,7 +26,7 @@ The options are the following :
 ./DisksProject example_config_file [domain_length [error_delta [sigma [step [limit [max_iter [threshold isDistance] ]]]]]]
 ```
 
-##Available examples :
+## Available examples :
 All available in the configs directory
 
 - forest.txt : 3 classes, 5 pcf, represents a toy forest, same as the first picture of the paper
