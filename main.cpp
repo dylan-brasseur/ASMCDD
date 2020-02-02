@@ -429,8 +429,8 @@ void setup_diskview(){
 void setup_pcf_view(){
     windows[PCF_CURRENT].plot = LinePlot::createLinePlot();
     windows[PCF_ORIGINAL].plot = LinePlot::createLinePlot();
-    windows[PCF_CURRENT].plot->setBounds(0, 0, 5, 2);
-    windows[PCF_ORIGINAL].plot->setBounds(0, 0, 5, 2);
+    windows[PCF_CURRENT].plot->setBounds(algo_params.step, 0, algo_params.limit, 2);
+    windows[PCF_ORIGINAL].plot->setBounds(algo_params.step, 0, algo_params.limit, 2);
 }
 
 void parse_arguments(int argc, char **argv){
