@@ -9,6 +9,9 @@
 
 #include <GL/glut.h>
 
+/**
+ * Disk instance coordinates
+ */
 struct InstanceCoordinates{
     //Coordinates
     float x;
@@ -19,6 +22,9 @@ struct InstanceCoordinates{
     float r;
 };
 
+/**
+ * This class manages the instances of each mesh
+ */
 class MeshInstances{
     std::shared_ptr<Mesh> base;
     std::vector<InstanceCoordinates> instances;
@@ -38,6 +44,9 @@ public:
     unsigned long getCount();
 };
 
+/**
+ * This class manages a scene, 3D and disks, with its instances
+ */
 class Scene {
 private:
     std::vector<MeshInstances> mesh_instances;

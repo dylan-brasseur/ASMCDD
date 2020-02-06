@@ -10,10 +10,9 @@
 #include <GL/glut.h>
 
 
-// -------------------------------------------
-// Basic Mesh class
-// Modified by Dylan Brasseur
-// -------------------------------------------
+/*
+ * Basic mesh class inspired from gmini, adapted for this project
+ */
 
 struct MeshVertex {
     inline MeshVertex () {}

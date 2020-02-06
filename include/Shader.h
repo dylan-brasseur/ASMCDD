@@ -10,6 +10,9 @@
 #include <vector>
 #include <memory>
 
+/**
+ * This class manages a shader for OpenGL
+ */
 class Shader{
 public:
     Shader(GLenum type, std::string const & filename);

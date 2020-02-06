@@ -10,6 +10,9 @@
 #include <map>
 #include "Vec3.h"
 
+/**
+ * This struct holds 1 plot line
+ */
 struct Plot{
     std::string name;
     float color[3];
@@ -20,6 +23,9 @@ struct Plot{
     }
 };
 
+/**
+ * This class is at the basis of plotting and can hold multiple plot lines
+ */
 class LinePlot{
 public:
     enum POSITION{TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT, CENTER};

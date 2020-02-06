@@ -10,6 +10,7 @@ layout(line_strip, max_vertices=VERTICES_PER_DISK+1) out;
 
 
 void main() {
+    //Creates the circles from the center position and the radius
     float r = gl_in[0].gl_Position[2];
     float theta = 2 * M_PI/float(VERTICES_PER_DISK);
     float c = cos(theta), s=sin(theta);

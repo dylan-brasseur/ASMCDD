@@ -10,6 +10,10 @@ struct float3{
     float b;
     float c;
 };
+
+/**
+ * Base vector class, from gmini
+ */
 class Vec3 {
 private:
     float mVals[3]{};

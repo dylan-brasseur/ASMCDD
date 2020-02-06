@@ -12,6 +12,11 @@
 #include <vector>
 #include <cmath>
 
+/*
+ * This file contains utility structures and functions that are light in nature
+ */
+
+
 const char* getErrorName(GLenum err);
 const char* getShaderName(GLenum type);
 
@@ -56,6 +61,10 @@ struct Compute_status{
     std::vector<unsigned long> parents;
 };
 
+/**
+ * Parameter structure of the algorithm
+ * The base values are from the original paper
+ */
 struct ASMCDD_params{
     float step = 0.1;
     float sigma = 0.25;
@@ -80,17 +89,34 @@ struct Compare{
     unsigned long j;
 };
 
+/**
+ * Computes the euclidian distance between 2 disks centers
+ * \param a Disk a
+ * \param b Disk b
+ * \return Euclidian distance between disk centers
+ */
 inline float euclidian(Disk const & a, Disk const & b)
 {
     return std::sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
 }
 
+/**
+ * Gaussian kernel
+ * \param sigma Standard deviation of the gaussian
+ * \param x
+ * \return Value of the gaussian
+ */
 inline float gaussian_kernel(float sigma, float x)
 {
     static const float sqrtpi = std::sqrt(M_PI);
     return std::exp(-((x*x)/(sigma*sigma)))/(sqrtpi*sigma);
 }
 
+/**
+ * Computes rmax
+ * \param n Number of disks
+ * \return rmax
+ */
 inline float computeRmax(unsigned long n)
 {
     return float(2.0*std::sqrt(1/(2*std::sqrt(3.0)*double(n))));

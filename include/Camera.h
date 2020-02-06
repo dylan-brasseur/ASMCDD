@@ -19,6 +19,9 @@ struct CameraState{
     GLint VP_location;
 };
 
+/**
+ * This class is used to ease the computation of camera matrices
+ */
 class Camera{
 public:
     explicit Camera(GLint VP_location);

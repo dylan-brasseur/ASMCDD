@@ -79,6 +79,7 @@ void Category::initialize(float domainLength, float e_delta){
     disks.clear();
     pcf.clear();
 
+    //Initialize the parents before this one (akin to the topological order)
     for(unsigned long parent : parents_id)
     {
         (*categories.get())[parent].initialize(domainLength, e_delta);
@@ -86,6 +87,7 @@ void Category::initialize(float domainLength, float e_delta){
 
     std::vector<float> output_disks_radii;
 
+    //Adapt to the domain length
     float n_factor = domainLength*domainLength;
     float diskfact = 1/domainLength;
     unsigned long long n_repeat = std::ceil(n_factor);
@@ -122,6 +124,8 @@ void Category::initialize(float domainLength, float e_delta){
     constexpr unsigned long MAX_LONG = std::numeric_limits<unsigned long>::max();
     std::map<unsigned long, std::vector<std::vector<float>>> weights;
     std::map<unsigned long, std::vector<float>> current_pcf;
+
+    //Compute the weights for each realtion disks
     for(auto relation : relations){
         current_pcf.insert(std::make_pair(relation, 0));
         current_pcf[relation].resize(nSteps, 0);
@@ -133,19 +137,23 @@ void Category::initialize(float domainLength, float e_delta){
     do{
         bool rejected=false;
         float e = e_0 + e_delta*fails;
+        //Generate a random disk
         Disk d_test(randf(rand_gen), randf(rand_gen), output_disks_radii[n_accepted]);
         for(auto relation : relations)
         {
             Contribution test_pcf;
             if(!disks.empty() || relation != id)
             {
+                //Computing the contribution of this disk to the pcf for this relation
                 test_pcf = compute_contribution(d_test, others[relation].disks, weights[relation], target_radii[relation], target_areas[relation], target_rmax[relation], parameters, relation == id ? n_accepted : MAX_LONG,relation == id ? 2*output_disks_radii.size()*output_disks_radii.size() : 2*output_disks_radii.size()*others[relation].disks.size(), diskfact);
                 if(e < compute_error(test_pcf, current_pcf[relation], target_pcf[relation]))
                 {
+                    //Disk is rejected if the error is too high
                     rejected=true;
                     break;
                 }
             }else{
+
                 test_pcf.pcf.resize(nSteps, 0);
                 test_pcf.contribution.resize(nSteps, 0);
                 test_pcf.weights = get_weight(d_test, target_radii[relation], diskfact);
@@ -157,6 +165,7 @@ void Category::initialize(float domainLength, float e_delta){
             fails++;
         }else
         {
+            //The disk is accepted, we add it to the list
             disks_access.lock();
             disks.push_back(d_test);
             disks_access.unlock();
@@ -179,6 +188,7 @@ void Category::initialize(float domainLength, float e_delta){
 
         if(fails > max_fails)
         {
+            //We have exceeded the 1000 fails threshold, we switch to a parallel grid search
             std::cout << "Grid searching : " << id <<std::endl;
             //Grid search
             constexpr unsigned long N_I = 100;
@@ -220,6 +230,7 @@ void Category::initialize(float domainLength, float e_delta){
                     }
                 }
 
+                //We automatically accept the disk with the lowest error
                 disks_access.lock();
                 disks.emplace_back((domainLength/N_I)*minError.i + (randf(rand_gen)-domainLength/2)/(N_I*10), (domainLength/N_J)*minError.j + (randf(rand_gen)-domainLength/2)/(N_J*10), output_disks_radii[n_accepted]);
                 disks_access.unlock();
@@ -243,14 +254,7 @@ void Category::initialize(float domainLength, float e_delta){
     }while(n_accepted < output_disks_radii.size());
     for(auto r : relations)
     {
-        std::vector<Target_pcf_type> cpcf;
-        cpcf.resize(nSteps, {0,0,0});
-        for(unsigned long k=0; k<nSteps; k++)
-        {
-            cpcf[k].mean = current_pcf[r][k];
-            cpcf[k].radius = (k+1)*parameters.step;
-        }
-        //pcf.insert_or_assign(r, cpcf);
+        //We're done with the initialisation, we recompute a pcf for the whole class to eliminate round off errors and such
         pcf.insert_or_assign(r, compute_pcf(disks, others[r].disks, target_areas[r], target_radii[r], target_rmax[r], parameters));
     }
     initialized=true;

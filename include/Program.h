@@ -11,6 +11,9 @@
 #include <iostream>
 #include "Shader.h"
 
+/**
+ * This class manages a program for OpenGL
+ */
 class Program{
 public:
     explicit Program(std::string const & name="");
